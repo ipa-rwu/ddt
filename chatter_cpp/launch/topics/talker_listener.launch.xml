@@ -1,0 +1,4 @@
+<launch>
+  <node pkg="chatter_cpp" exec="talker" output="screen" />
+  <node pkg="chatter_cpp" exec="listener" output="screen" />
+</launch>
