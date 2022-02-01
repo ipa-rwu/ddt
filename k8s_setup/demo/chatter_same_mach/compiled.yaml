@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: chatter-foxy
+    namespace: chatter
+    node: listener
+  name: chatter-foxy-listener
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      node: listener
+  template:
+    metadata:
+      labels:
+        node: listener
+    spec:
+      containers:
+      - args:
+        - ros2
+        - launch
+        - chatter_cpp
+        - listener.launch.py
+        env:
+        - name: ROS_DOMAIN_ID
+          value: "42"
+        image: rachelwu/chatter:foxy
+        name: chatter-foxy-listener
+      nodeSelector:
+        machine: samsung
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: chatter-foxy
+    namespace: chatter
+    node: talker
+  name: chatter-foxy-talker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      node: talker
+  template:
+    metadata:
+      labels:
+        node: talker
+    spec:
+      containers:
+      - args:
+        - ros2
+        - launch
+        - chatter_cpp
+        - talker.launch.py
+        env:
+        - name: ROS_DOMAIN_ID
+          value: "42"
+        image: rachelwu/chatter:foxy
+        name: chatter-foxy-talker
+      nodeSelector:
+        machine: samsung
