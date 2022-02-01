@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chatter-foxy-talker
+  labels:
+    app: chatter-foxy
+    node: talker
+    namespace: chatter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      node: talker
+  template:
+    metadata:
+      labels:
+        node: talker
+      annotations:
+        k8s.v1.cni.cncf.io/networks: ros2-network
+    spec:
+      containers:
+      - name: chatter-foxy-talker
+        image: rachelwu/chatter:zenoh
+        args:
+          - "ros2"
+          - "launch"
+          - "chatter_cpp"
+          - "talker.launch.py"
+        env:
+            -
+              name: ROS_DOMAIN_ID
+              value: "42"
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+      nodeSelector:
+            machine: samsung
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: service-talker
+#   labels:
+#     app: chatter-foxy
+#     node: talker
+#     namespace: chatter
+# spec:
+#   # Start a headless service
+#   # https://kubernetes.io/docs/concepts/services-networking/service/#headless-services
+#   clusterIP: None
+#   ports:
+#     - port: 11311
+#   selector:
+#     node: talker
