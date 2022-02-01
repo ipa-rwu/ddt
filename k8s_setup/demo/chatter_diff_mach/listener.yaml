@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chatter-foxy-listener
+  labels:
+    app: chatter-foxy
+    node: listener
+    namespace: chatter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      node: listener
+  # The deployment makes sure that a POD containing the containers
+  # defined below is always running.
+  template:
+    metadata:
+      labels:
+        node: listener
+    spec:
+      hostNetwork: true
+      containers:
+      # The real node container
+      - name: chatter-foxy-listener
+        image: rachelwu/chatter:foxy
+        args:
+        - "ros2"
+        - "launch"
+        - "chatter_cpp"
+        - "listener.launch.py"
+        env:
+            -
+              name: ROS_DOMAIN_ID
+              value: "42"
+      nodeSelector:
+            machine: nuc8
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: service-listener
+#   labels:
+#     app: chatter-foxy
+#     node: listener
+#     namespace: chatter
+# spec:
+#   # Start a headless service
+#   # https://kubernetes.io/docs/concepts/services-networking/service/#headless-services
+#   clusterIP: None
+#   ports:
+#     - port: 11311
+#   selector:
+#     node: listener
