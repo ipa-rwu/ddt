@@ -2,7 +2,7 @@
 ARG SUFFIX=
 ARG BUILDER_SUFFIX=:ros2
 ARG PREFIX=rachelwu/
-FROM ros:foxy-ros-core as base
+FROM ${PREFIX}ros2:foxy as base
 FROM ${PREFIX}builder${BUILDER_SUFFIX} as builder
 
 FROM base as build
