@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: chatter-foxy
+    namespace: chatter
+    node: listener
+  name: chatter-foxy-listener
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      node: listener
+  template:
+    metadata:
+      annotations:
+        k8s.v1.cni.cncf.io/networks: ros2-network
+      labels:
+        node: listener
+    spec:
+      containers:
+      - args:
+        - ros2
+        - launch
+        - chatter_cpp
+        - listener.launch.py
+        env:
+        - name: ROS_DOMAIN_ID
+          value: "43"
+        - name: MY_POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        image: rachelwu/chatter:zenoh
+        name: chatter-foxy-listener
+      nodeSelector:
+        machine: nuc8
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: chatter-foxy
+    namespace: chatter
+    node: talker
+  name: chatter-foxy-talker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      node: talker
+  template:
+    metadata:
+      annotations:
+        k8s.v1.cni.cncf.io/networks: ros2-network
+      labels:
+        node: talker
+    spec:
+      containers:
+      - args:
+        - ros2
+        - launch
+        - chatter_cpp
+        - talker.launch.py
+        env:
+        - name: ROS_DOMAIN_ID
+          value: "42"
+        - name: MY_POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        image: rachelwu/chatter:zenoh
+        name: chatter-foxy-talker
+      nodeSelector:
+        machine: samsung
