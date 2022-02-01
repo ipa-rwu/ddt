@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zenoh-router
+  labels:
+    app: chatter-foxy
+    node: zenoh-router
+    namespace: chatter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      node: zenoh-router
+  # The deployment makes sure that a POD containing the containers
+  # defined below is always running.
+  template:
+    metadata:
+      labels:
+        node: zenoh-router
+    spec:
+      hostNetwork: true
+      containers:
+      # The real node container
+      - name: zenoh-router
+        image: eclipse/zenoh:master
+        env:
+            -
+              name: RUST_LOG
+              value: "debug"
+        ports:
+          - containerPort: 7447
+          - containerPort: 8000
+      #   volumeMounts:
+      #     - mountPath: /root/.zenoh
+      #       name: zenoh-docker
+      # volumes:
+      #   - name: zenoh-docker
+      #     hostPath:
+      #       path: ./zenoh_docker
+      nodeSelector:
+            machine: samsung
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zenoh-router-service
+  labels:
+    app: chatter-foxy
+    node: zenoh-router
+    namespace: chatter
+spec:
+  ports:
+  - name: zenoh-rest
+    port: 8000
+    protocol: TCP
+  - name: zenoh-protocol
+    port: 7447
+    protocol: TCP
+  selector:
+    node: zenoh-router

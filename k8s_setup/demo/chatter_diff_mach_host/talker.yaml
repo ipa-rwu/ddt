@@ -22,16 +22,20 @@ spec:
       containers:
       # The real node container
       - name: chatter-foxy-talker
-        image: rachelwu/chatter:foxy
+        image: rachelwu/chatter:zenoh
         args:
-        - "ros2"
-        - "launch"
-        - "chatter_cpp"
-        - "talker.launch.py"
+          - "ros2"
+          - "launch"
+          - "chatter_cpp"
+          - "talker.launch.py"
         env:
             -
               name: ROS_DOMAIN_ID
               value: "42"
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
       nodeSelector:
             machine: samsung
 # ---
