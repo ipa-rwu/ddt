@@ -22,7 +22,7 @@ spec:
       containers:
       # The real node container
       - name: chatter-foxy-listener
-        image: rachelwu/chatter:foxy
+        image: rachelwu/chatter:zenoh
         args:
         - "ros2"
         - "launch"
@@ -31,7 +31,13 @@ spec:
         env:
             -
               name: ROS_DOMAIN_ID
-              value: "42"
+              value: "43"
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+        # ports:
+        #     - containerPort: 7447
       nodeSelector:
             machine: nuc8
 # ---
@@ -49,5 +55,21 @@ spec:
 #   clusterIP: None
 #   ports:
 #     - port: 11311
+#   selector:
+#     node: listener
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: chatter-foxy-listener-zenoh-service
+#   labels:
+#     app: chatter-foxy
+#     node: listener
+#     namespace: chatter
+# spec:
+#   ports:
+#   - name: zenoh-protocol
+#     port: 7447
+#     protocol: TCP
 #   selector:
 #     node: listener

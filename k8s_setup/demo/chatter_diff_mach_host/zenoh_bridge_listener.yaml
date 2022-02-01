@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chatter-foxy-zenoh-listener
+  labels:
+    app: chatter-foxy
+    node: zenoh-listener
+    namespace: chatter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      node: zenoh-listener
+  # The deployment makes sure that a POD containing the containers
+  # defined below is always running.
+  template:
+    metadata:
+      labels:
+        node: zenoh-listener
+    spec:
+      hostNetwork: true
+      containers:
+      # The real node container
+      - name: chatter-listener-zenoh
+        image: eclipse/zenoh-bridge-dds:master
+        args:
+        - "-d"
+        - $(ROS_DOMAIN_ID)
+        - -e
+        - tcp/10.244.3.1:7447
+        env:
+            -
+              name: ROS_DOMAIN_ID
+              value: "42"
+      nodeSelector:
+            machine: nuc8
