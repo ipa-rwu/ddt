@@ -29,9 +29,9 @@
 
         socket.on('show_reception', function(msg) {
           console.log("show_reception", msg)
-          var text = "<li><a class=\"active\" href=\"#HOME\" onclick={{ show_ros_graph() }}>HOME</a></li>";
+          var text = "<li><a class=\"active\" href=\"{{ url_for('home') }}\" onclick={{ show_ros_graph() }} value=HOME>HOME</a></li>";
           for (let i = 0; i < msg.data.length; i++) {
-            var new_line = `<li><a href=\"/${msg.data[i]}\">${msg.data[i]}</a></li>`
+            var new_line = `<li><a href=\"/app_${msg.data[i]}\" onclick={{ show_ros_graph() }} value=${msg.data[i]} >${msg.data[i]}</a></li>`
             text += new_line;
           }
           $('#app_list').html(text);

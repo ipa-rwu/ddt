@@ -1,15 +1,18 @@
 import flask
-from flask import Flask, render_template, request, session
+from flask import Flask, render_template, request, session, redirect, url_for, Markup
 from flask_socketio import SocketIO, send, join_room, leave_room, emit, rooms
 import json
 import logging
 from threading import Lock
+from pathlib import Path
+from .action import make_ros_graph
 
 app = Flask(__name__)
 from model.ddt_model import Application, Pod
 
 app.config['SECRET_KEY'] = 'secret'
 app.config['DEBUG'] = True
+
 socketio = SocketIO(app)
 thread = None
 thread_lock = Lock()
@@ -22,6 +25,10 @@ Apps = list()
 RoomWeb = list()
 RoomWebName = 'Room-Web'
 WebID = None
+ManagerPwd = Path(__file__).parent
+TmpFolder = ManagerPwd / 'tmp'
+
+app.jinja_env.globals.update(show_ros_graph=make_ros_graph)
 
 class Message:
     def toJSON(self):
@@ -31,18 +38,40 @@ class Message:
     def dict(self):
         return json.loads(self.toJSON())
 
-def show_ros_graph():
-    print("clever_function HI")
+def read_file(path):
+    with open(path,"r") as file:
+        content = file.readlines()
+    return content
 
-app.jinja_env.globals.update(show_ros_graph=show_ros_graph)
+def get_rooms(sid):
+    l = rooms(sid)
+    l.remove(sid)
+    return l
+
+def name_app_room(app):
+    return f'Room-{app}'
 
 @app.route('/')
 def index():
     return render_template('index.html', AppNames=AppNames)
 
-@app.route('/<appid>')
-def app_page(appid):
-    return render_template('app.html', appid=appid)
+@app.route('/home')
+def home():
+    return redirect(url_for('index'))
+
+@app.route('/favicon.ico')
+def favicon():
+    return 'dummy', 200
+
+@app.route('/app_<string:app_id>')
+def app_page(app_id):
+    app_folder = Path(TmpFolder, app_id)
+    app_folder.mkdir(exist_ok=True)
+    graph_map_path = app_folder / f'{app_id}.map'
+    graph = app_folder / f'{app_id}.svg'
+    svg = open(str(graph)).read()
+    graph_map = read_file(graph_map_path)
+    return render_template('app.html', appid=app_id, graph_map = graph_map, ros_graph = Markup(svg))
 
 def monitor_applist_thread():
     """Example of how to send server generated events to clients."""
@@ -103,13 +132,7 @@ def register_web(msg):
     print(msg.toJSON())
     socketio.emit('show_log', msg.dict(), to=RoomWebName)
 
-def get_rooms(sid):
-    l = rooms(sid)
-    l.remove(sid)
-    return l
 
-def name_app_room(app):
-    return f'Room-{app}'
 """
 Register a prob per Pod
 """
