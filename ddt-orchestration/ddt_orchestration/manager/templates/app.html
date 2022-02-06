@@ -1,6 +1,40 @@
 {% extends "index.html" %}
 {% block context %}
-<section>
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+<script type=text/javascript>
+        $(function() {
+          $('a#show_graph').on('click', function(e) {
+            e.preventDefault()
+            $.getJSON('/app_{{ appid }}/show_graph',
+                function(data) {
+                    $('#ros_graph').html( data.result )
+                });
+            return false;
+          });
+        });
+</script>
+<script type=text/javascript>
+    $(function() {
+      $('a#pause_graph').on('click', function(e) {
+        e.preventDefault()
+        $.getJSON('/app_{{ appid }}/pause_graph',
+            function(data) {
+          console.log("pause_graph")
+          console.log(data)
+        });
+        return false;
+      });
+    });
+</script>
+<div class="btn-group">
+    <a href=# id=show_graph><button style="width:50%">Show ROS Graph</button></a>
+    <a href=# id=pause_graph><button style="width:50%">Pause ROS GRaph Update</button></a>
+  </div>
+<p>
+
+</p>
+
+<section id="ros_graph">
     {{ ros_graph }}
 </section>
 {% endblock  %}

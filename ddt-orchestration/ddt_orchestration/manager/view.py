@@ -1,11 +1,13 @@
 import flask
-from flask import Flask, render_template, request, session, redirect, url_for, Markup
+from flask import Flask, render_template, request, session, redirect, url_for, Markup, jsonify
 from flask_socketio import SocketIO, send, join_room, leave_room, emit, rooms
-import json
+import json as Json
 import logging
 from threading import Lock
 from pathlib import Path
-from .action import make_ros_graph
+from functools import partial
+
+from .action import make_ros_graph, pause_ros_graph, stop_command, pre_make_ros_graph
 
 app = Flask(__name__)
 from model.ddt_model import Application, Pod
@@ -27,16 +29,21 @@ RoomWebName = 'Room-Web'
 WebID = None
 ManagerPwd = Path(__file__).parent
 TmpFolder = ManagerPwd / 'tmp'
+Processes = ['rosgraph', 'debug_bridge', 'rosgraph_bridge']
 
-app.jinja_env.globals.update(show_ros_graph=make_ros_graph)
+def show_ros_graph(app):
+    app_path = Path(TmpFolder / app)
+    pids = make_ros_graph(app, f'app_{app}', app_path)
+    return pids
+app.jinja_env.globals.update(show_ros_graph=show_ros_graph)
 
 class Message:
     def toJSON(self):
-        dump =  json.dumps(self, default=lambda o: o.__dict__,
+        dump =  Json.dumps(self, default=lambda o: o.__dict__,
             sort_keys=True, indent=4)
         return dump
     def dict(self):
-        return json.loads(self.toJSON())
+        return Json.loads(self.toJSON())
 
 def read_file(path):
     with open(path,"r") as file:
@@ -67,11 +74,64 @@ def favicon():
 def app_page(app_id):
     app_folder = Path(TmpFolder, app_id)
     app_folder.mkdir(exist_ok=True)
-    graph_map_path = app_folder / f'{app_id}.map'
     graph = app_folder / f'{app_id}.svg'
-    svg = open(str(graph)).read()
-    graph_map = read_file(graph_map_path)
-    return render_template('app.html', appid=app_id, graph_map = graph_map, ros_graph = Markup(svg))
+    svg = None
+    if graph.is_file():
+        svg = open(str(graph)).read()
+    return render_template('app.html', appid=app_id, ros_graph = Markup(svg))
+
+CurrentPids = list()
+@app.route('/app_<string:app_id>/show_graph')
+def show_graph(app_id):
+    app_folder = Path(TmpFolder, app_id)
+    graph = app_folder / f'{app_id}.svg'
+    org_graph = app_folder / f'{app_id}.dot'
+    p_rosgraph = globals()[f"{app_id}"].find_process('rosgraph')
+    print(p_rosgraph.dict())
+    if not p_rosgraph.state:
+        processes = pre_make_ros_graph(app_id, Path(TmpFolder / app_id))
+        while org_graph.is_file():
+            show_ros_graph(app_id)
+            break
+        # print(list(processes))
+        for n, id in processes:
+            p = globals()[f"{app_id}"].find_process(n)
+            p.set(pid=id, state=True)
+            # globals()[f"{app_id}"].update_process(n, dict(zip(["pid","state"], g)))
+    for p in globals()[f"{app_id}"].processes:
+        print("show_graph: ", p.dict())
+
+
+    print("show_graph graph path: ", graph)
+    show_ros_graph(app_id)
+    svg = None
+    if graph.is_file():
+        svg = open(str(graph)).read()
+        print("show_graph graph now")
+    return jsonify(result=Markup(svg))
+
+@app.route('/app_<string:app_id>/pause_graph')
+def pause_graph(app_id):
+    for target in ['rosgraph', 'rosgraph_bridge']:
+        p = globals()[f"{app_id}"].find_process(target)
+        if p.state:
+            stop_command(p.pid)
+            p.stop()
+    return ("nothing")
+
+"""
+Click topic
+"""
+@app.route('/app_<string:app_id>/topic_<topic_id>/')
+def node(app_id, topic_id):
+    return redirect(url_for('app_page', app_id=app_id))
+
+"""
+Click node
+"""
+@app.route('/app_<string:app_id>/__<node_id>/')
+def topic(app_id, node_id):
+    return redirect(url_for('app_page', app_id=app_id))
 
 def monitor_applist_thread():
     """Example of how to send server generated events to clients."""
@@ -95,27 +155,6 @@ def on_connect():
     app.logger.info(f"{msg.dict()}")
     socketio.emit('show_log', msg.dict())
 
-# @app.route('/applications')
-# def suggestions():
-#     text = request.args.get('jsdata')
-
-#     suggestions_list = []
-
-#     if text:
-#         r = requests.get('http://suggestqueries.google.com/complete/search?output=toolbar&hl=ru&q={}&gl=in'.format(text))
-
-#         soup = BeautifulSoup(r.content, 'lxml')
-
-#         suggestions = soup.find_all('suggestion')
-
-#         for suggestion in suggestions:
-#             suggestions_list.append(suggestion.attrs['data'])
-
-#         #print(suggestions_list)
-
-#     return render_template('index.html', apps=apps)
-
-
 """
 regsiter web interface
 """
@@ -132,13 +171,12 @@ def register_web(msg):
     print(msg.toJSON())
     socketio.emit('show_log', msg.dict(), to=RoomWebName)
 
-
 """
 Register a prob per Pod
 """
 @socketio.on('register')
 def on_join(msg):
-    js = json.loads(msg["data"])
+    js = Json.loads(msg["data"])
     app_name = js["App"]
     pod_name = js['Pod']
     pod_ip = js['PodIP']
@@ -147,9 +185,11 @@ def on_join(msg):
         # create a list per Room
         globals()[name_app_room(app_name)] = list()
         AppNames.append(app_name)
-        # create an istance of Application
+        # create an instance of Application
         globals()[f"{app_name}"] = Application(app_name)
-        # create an istance of Pod
+        for p in Processes:
+            globals()[f"{app_name}"].add_process(p)
+        # create an instance of Pod
         globals()[f"{pod_name}"] = Pod(pod_name, pod_ip, socket_id)
         global WebID
         join_room(name_app_room(app_name), sid = WebID)
@@ -179,7 +219,7 @@ def my_ping():
 
 @socketio.on('leave')
 def on_leave(data):
-    js = json.loads(data)
+    js = Json.loads(data)
     app_name = js["App"]
     pod_name = js['Pod']
     leave_room(app_name)
