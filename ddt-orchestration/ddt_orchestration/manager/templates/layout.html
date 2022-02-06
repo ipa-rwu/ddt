@@ -12,17 +12,17 @@
     {% endblock  %}
 </head>
 <body>
-    <div class="header">
+    <!-- <div class="header">
       <h1>DDT</h1>
       <p>Debug Tool</p>
-    </div>
-    <div class="topnav">
+    </div> -->
+    <!-- <div class="topnav">
       <p>
         Async mode is: <b>{{ async_mode }}</b><br>
         Current transport is: <b><span id="transport"></span></b><br>
         Average ping/pong latency: <b><span id="ping-pong"></span>ms</b>
       </p>
-    </div>
+    </div> -->
     {% block nav %}
     <ul id="app_list">
         <li><a class="active" href="/HOME">HOME</a></li>
@@ -31,6 +31,6 @@
     <div style="margin-left:25%;padding:1px 16px;height:1000px;">
         {% block context %}
         {% endblock  %}
-      </div>
+    </div>
 </body>
 </html>
