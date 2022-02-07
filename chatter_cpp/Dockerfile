@@ -2,13 +2,14 @@
 ARG SUFFIX=
 ARG BUILDER_SUFFIX=:ros2
 ARG PREFIX=rachelwu/
-FROM ${PREFIX}ros2:foxy as base
+FROM ${PREFIX}ros:galactic as base
 FROM ${PREFIX}builder${BUILDER_SUFFIX} as builder
 
 FROM base as build
-COPY . /root/ws/src/lifecycle_chat/
+COPY . /root/ws/src/targets/
 RUN --mount=type=bind,from=builder,target=/builder \
     apt-get update -qq && \
+    apt-get upgrade -qq && \
     /builder/workspace.bash builder_setup && \
     /builder/workspace.bash build_workspace /root/ws && \
     rm -rf /var/lib/apt/lists/*
@@ -22,13 +23,13 @@ RUN --mount=type=bind,from=builder,target=/builder \
 FROM build as install
 RUN --mount=type=bind,from=builder,target=/builder \
     apt-get update -qq && \
-    /builder/workspace.bash install_depends /root/ws && \
+    /builder/workspace.bash install_workspace /root/ws && \
     rm -rf /var/lib/apt/lists/*
 
 FROM install as full
 RUN --mount=type=bind,from=builder,target=/builder \
     apt-get update -qq && \
-    /builder/workspace.bash install_workspace /root/ws && \
+    /builder/workspace.bash install_depends /root/ws && \
     rm -rf /var/lib/apt/lists/*
 
 FROM base as deploy
@@ -38,5 +39,5 @@ RUN --mount=type=bind,from=builder,target=/builder --mount=type=bind,target=/roo
     rm -rf /var/lib/apt/lists/*
 COPY --from=install /opt/ros/$ROS_DISTRO /opt/ros/$ROS_DISTRO
 
-FROM full as launch
-CMD ["ros2", "launch", "chatter_cpp", "talker.launch.py"]
+FROM deploy as launch
+# CMD ["ros2", "launch", "chatter_cpp", "talker.launch.py"]
