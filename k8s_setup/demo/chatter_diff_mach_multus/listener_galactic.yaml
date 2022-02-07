@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chatter-galactic-listener
+  labels:
+    app: chatter-galactic
+    node: listener
+    namespace: chatter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      node: listener
+  template:
+    metadata:
+      labels:
+        node: listener
+      annotations:
+        k8s.v1.cni.cncf.io/networks: rosmc-network
+    spec:
+      containers:
+      - name: chatter-galactic-listener
+        image: rachelwu/chatterpy:galactic
+        args:
+          - "ros2"
+          - "launch"
+          - "chatter_py"
+          - "listener.launch.py"
+        env:
+            -
+              name: ROS_DOMAIN_ID
+              value: "42"
+            -
+              name: NETINTERFACE
+              value: "net1"
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+        ports:
+            - containerPort: 8000
+      nodeSelector:
+            machine: samsung
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-listener
+  labels:
+    app: chatter-galactic
+    node: listener
+    namespace: chatter
+spec:
+  # Start a headless service
+  # https://kubernetes.io/docs/concepts/services-networking/service/#headless-services
+  clusterIP: None
+  ports:
+    - port: 8000
+  selector:
+    node: listener
