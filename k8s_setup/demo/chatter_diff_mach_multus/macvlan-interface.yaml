@@ -1,0 +1,21 @@
+apiVersion: "k8s.cni.cncf.io/v1"
+kind: NetworkAttachmentDefinition
+metadata:
+  name: rosmc-network
+spec:
+  config: '{
+      "cniVersion": "0.3.0",
+      "type": "macvlan",
+      "master": "rosmc",
+      "mode": "bridge",
+      "ipam": {
+        "type": "host-local",
+        "subnet": "10.0.0.1/24",
+        "rangeStart": "10.0.0.30",
+        "rangeEnd": "10.0.0.60",
+        "routes": [
+          { "dst": "0.0.0.0/0" }
+        ],
+        # "gateway": "10.0.0.0"
+      }
+    }'
