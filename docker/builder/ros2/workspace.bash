@@ -68,7 +68,7 @@ function build_workspace {
     local ws=$1; shift
     apt_get_install build-essential
     setup_rosdep
-    ROS_VERSION=0
+    ROS_VERSION=2
     source "/opt/ros/$ROS_DISTRO/setup.bash"
     for file in $ws/src/*.rosinstall; do
         if [[ -f ${file} ]]; then
@@ -112,9 +112,8 @@ function install_depends {
 
 function install_workspace {
     local ws=$1; shift
-    setup_rosdep
-    ROS_VERSION=0
     source "/opt/ros/$ROS_DISTRO/setup.bash"
+    # didn't work on galactic
     cd $ws && rm -r install build && colcon build --merge-install --install-base "/opt/ros/$ROS_DISTRO"
 }
 
