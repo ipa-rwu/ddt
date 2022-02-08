@@ -5,8 +5,8 @@
             <NetworkInterfaceAddress>${NETINTERFACE}</NetworkInterfaceAddress>
         </General>
     </Domain>
-    <Tracing>
+    <!-- <Tracing>
         <Verbosity>config</Verbosity>
         <OutputFile>stdout</OutputFile>
-    </Tracing>
+    </Tracing> -->
 </CycloneDDS>
