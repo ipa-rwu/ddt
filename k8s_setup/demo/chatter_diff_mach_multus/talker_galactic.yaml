@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: chatter-galactic-talker
-        image: rachelwu/chatterpy:galactic
+        image: inspiron:5000/chatterpy:galactic
         args:
           - "ros2"
           - "launch"
@@ -42,7 +42,7 @@ spec:
         ports:
             - containerPort: 8000
       nodeSelector:
-            machine: nuc8
+            machine: samsung
 ---
 apiVersion: v1
 kind: Service
