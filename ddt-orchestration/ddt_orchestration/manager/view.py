@@ -93,8 +93,10 @@ def show_graph(app_id):
 def pause_graph(app_id):
     for target in ['rosgraph', 'rosgraph_bridge']:
         p = globals()[f"{app_id}"].find_process(target)
+        msg = Message()
+        setattr(msg, p.name, p.pid)
         if p.state:
-            stop_command(p.pid)
+            socketio.emit('pause_graph', msg.dict(), to = name_app_room(app_id))
             p.stop()
     return ("nothing")
 
