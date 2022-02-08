@@ -6,25 +6,20 @@ from pathlib import Path
 
 import rclpy
 import rclpy.action
-from rclpy.qos import qos_profile_sensor_data
-from ros2topic.api import get_msg_class
-from ros2topic.api import get_topic_names_and_types
 
 from rqt_graph.dotcode import RosGraphDotcodeGenerator
 from rqt_graph.rosgraph2_impl import Graph
 from qt_dotgraph.pydotfactory import PydotFactory
 
 import rclpy.node
-
 class ParserNode(rclpy.node.Node):
     def __init__(self):
         super().__init__('graph_parser')
-        timer_period = 2  # seconds
 
         self.declare_parameters(
             namespace='',
             parameters=[
-                ('result_path', None),
+                ('result_path', ''),
                 ('application_name', "test"),
                 ('sampling_rate', 10),
                 ('mode', "NODE_TOPIC_ALL_GRAPH")
@@ -32,7 +27,7 @@ class ParserNode(rclpy.node.Node):
         )
 
         self.result_path = Path(self.get_parameter('result_path').get_parameter_value().string_value).resolve()
-        if self.result_path is None or self.result_path =="None":
+        if self.result_path is None or self.result_path =="":
             self.result_path = Path.home()
         self.timer = self.create_timer(self.get_parameter('sampling_rate').value, self.timer_callback)
         self.mode = self.get_parameter('mode').get_parameter_value().string_value
@@ -68,9 +63,6 @@ class ParserNode(rclpy.node.Node):
         self.graph.update()
         self.get_logger().info(str(self.graph.nn_nodes))
         self.write_into_dot(self.graph)
-
-        # self.get_logger().info('Hello !')
-
 
 def main():
     rclpy.init()
