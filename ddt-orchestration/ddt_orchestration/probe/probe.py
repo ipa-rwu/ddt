@@ -41,6 +41,13 @@ async def show_graph(msg):
     new_msg.app_id = app_id
     await sio.emit('start_rosgrah', new_msg.dict())
 
+@sio.on('pause_graph')
+async def pause_graph(msg):
+    m = Message(**msg)
+    for pid in msg.values():
+        print("stop: ", pid)
+        stop_command(pid)
+
 @sio.event
 async def disconnect():
     print('disconnected from server')
