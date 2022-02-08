@@ -131,7 +131,4 @@ dmypy.json
 
 .vscode/
 
-test/tmp/
-test/*/*Translations.xlsx
-*~*.xlsx*
-/export/
+ddt-orchestration/ddt_orchestration/tmp
