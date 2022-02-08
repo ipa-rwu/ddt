@@ -3,37 +3,50 @@ import socketio
 import argparse
 import json
 import logging
-import time
+from pathlib import Path
+import os
+
+from ddt_orchestration.model.ddt_model import Application, Pod, Message, Process
+from ddt_orchestration.manager.action import make_ros_graph, pause_ros_graph, stop_command, pre_make_ros_graph
+
+ManagerPwd = Path(__file__).parent.parent
+TmpFolder = ManagerPwd / 'tmp'
 
 sio = socketio.AsyncClient()
+
+def show_ros_graph(app):
+    app_path = Path(TmpFolder / app)
+    pids = make_ros_graph(app, f'app_{app}', app_path)
+    return pids
 
 @sio.event
 async def connect():
     logging.info(f'connected to server')
-    # await sio.emit('connect', {'data': 'I\'m connected! as {sio.sid}'})
     await register()
 
-@sio.event
-async def join():
-    msg = {"App": ID.app_id,
-        "Pod": ID.pod_id,
-        "PodIP": ID.pod_ip,
-        "Sio": sio.sid}
-    data = json.dumps(msg)
-    logging.info(f'[{msg["Pod"]}] from [{msg["App"]}] registered to server as {sio.sid}')
-    await sio.emit('my_join', data)
+@sio.on('show_graph')
+async def show_graph(msg):
+    m = Message(**msg)
+    app_id = m.app_id
+    app_folder = Path(TmpFolder, app_id)
+    org_graph = app_folder / f'{app_id}.dot'
 
-@sio.event
-async def my_message(data):
-    print('message received with ', data)
-    await sio.emit('my response', {'response': 'my response'})
+    processes = pre_make_ros_graph(app_id, Path(TmpFolder / app_id))
+    while org_graph.is_file():
+        show_ros_graph(app_id)
+        break
+    new_msg = Message()
+    ps = [dict(zip(("name", "pid"), (name, proc.pid))) for name, proc in processes]
+    new_msg.processes = ps
+    new_msg.app_id = app_id
+    await sio.emit('start_rosgrah', new_msg.dict())
 
 @sio.event
 async def disconnect():
     print('disconnected from server')
 
 async def main():
-    await sio.connect('http://localhost:5000')
+    await sio.connect('http://localhost:1234')
     await sio.wait()
 
 @sio.event
@@ -60,5 +73,3 @@ if __name__ == '__main__':
             level=logging.INFO,
             datefmt='%Y-%m-%d %H:%M:%S')
     asyncio.run(main())
-
-import socketio

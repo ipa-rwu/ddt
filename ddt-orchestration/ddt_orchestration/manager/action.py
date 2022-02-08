@@ -9,6 +9,7 @@ from shlex import split
 from turtle import dot
 import pygraphviz as pgv
 from pathlib import Path
+import os
 
 def start_command(command):
     print("Start command: ", command)
@@ -17,14 +18,16 @@ def start_command(command):
     return pid
 
 def stop_command(pid):
-    pid.send_signal(subprocess.signal.SIGINT)
+    if isinstance(pid, int):
+        os.kill(pid, subprocess.signal.SIGINT)
+    else:
+        pid.send_signal(subprocess.signal.SIGINT)
 
 def start_zenoh(host):
     pid_zenoh = start_command(f"./root/zenoh-bridge-dds -d $ROS_DOMAIN_ID -e tcp/{host}:7447 -f")
     return pid_zenoh
 
 def get_ros_graph(app, folder_path):
-    print("Start ros Graph Creator")
     pid_graph_creator = start_command(f"ros2 launch ros2_graph_quest gen_dot.launch.py application_name:=\"{app}\" result_path:=\"{folder_path}\"")
     print(pid_graph_creator)
     return pid_graph_creator
@@ -44,7 +47,6 @@ def rewrite_dot(dot_path, name, prefix):
     ros_gh = pgv.AGraph(org_pt)
     for node in ros_gh.nodes():
         node.attr["URL"] = create_url(prefix, node.attr["URL"])
-    print("rewrite_dot")
     ros_gh.draw(path=new_pt, prog='dot', format='svg' )
 
 def pre_make_ros_graph(app, folder_path, host = None, debug=True):
@@ -57,7 +59,6 @@ def pre_make_ros_graph(app, folder_path, host = None, debug=True):
 def make_ros_graph(app, prefix, folder_path):
     if folder_path.is_dir():
         dot_path = folder_path / f'{app}.dot'
-        print("folder", dot_path)
         if dot_path.is_file():
             rewrite_dot(dot_path, app, prefix)
 

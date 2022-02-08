@@ -1,5 +1,17 @@
 from fcntl import F_GETLEASE
 from .rosmodel import Node
+import json as Json
+
+class Message:
+    def __init__(self, **my_dict):
+        for key in my_dict:
+            setattr(self, key, my_dict[key])
+    def toJSON(self):
+        dump =  Json.dumps(self, default=lambda o: o.__dict__,
+            sort_keys=True, indent=4)
+        return dump
+    def dict(self):
+        return Json.loads(self.toJSON())
 
 class Pod(object):
     def __init__(self, name, ip, socket_id):
@@ -12,17 +24,17 @@ class Pod(object):
             self.nodes.append(node)
 
 class Process(object):
-    def __init__(self, name):
+    def __init__(self, name, pid=None, state=False):
         self.name = name
-        self.state = False
-        self.pid = None
+        self.state = state
+        self.pid = pid
     def set(self, **kwargs):
         for k,v in kwargs.items():
             if k in self.__dict__.keys():
                 setattr(self, k, v)
-    def start(self, process):
+    def start(self, pid):
         self.state = True
-        self.pid = process
+        self.pid = pid
     def stop(self):
         self.state = False
         self.pid = None
@@ -50,6 +62,5 @@ class Application(object):
                 return p
     def update_process(self, name, **kwargs):
         p = self.find_process(name)
-        print(p.dict())
         p.set(**kwargs)
         print(p.dict())

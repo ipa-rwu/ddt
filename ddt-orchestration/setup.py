@@ -12,7 +12,8 @@ setuptools.setup(
         'python-socketio[asyncio_client]',
         'flask',
         'flask_sockets',
-        'flask-socketio'
+        'flask-socketio',
+        'pygraphviz'
     ],
     entry_points = {
     },
