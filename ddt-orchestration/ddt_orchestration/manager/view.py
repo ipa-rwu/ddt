@@ -7,10 +7,10 @@ from threading import Lock
 from pathlib import Path
 from functools import partial
 
-from .action import make_ros_graph, pause_ros_graph, stop_command, pre_make_ros_graph
+from ddt_orchestration.manager.action import make_ros_graph, pause_ros_graph, stop_command, pre_make_ros_graph
+from ddt_orchestration.model.ddt_model import Application, Pod, Message, Process
 
 app = Flask(__name__)
-from model.ddt_model import Application, Pod
 
 app.config['SECRET_KEY'] = 'secret'
 app.config['DEBUG'] = True
@@ -27,7 +27,7 @@ Apps = list()
 RoomWeb = list()
 RoomWebName = 'Room-Web'
 WebID = None
-ManagerPwd = Path(__file__).parent
+ManagerPwd = Path(__file__).parent.parent
 TmpFolder = ManagerPwd / 'tmp'
 Processes = ['rosgraph', 'debug_bridge', 'rosgraph_bridge']
 
@@ -36,14 +36,6 @@ def show_ros_graph(app):
     pids = make_ros_graph(app, f'app_{app}', app_path)
     return pids
 app.jinja_env.globals.update(show_ros_graph=show_ros_graph)
-
-class Message:
-    def toJSON(self):
-        dump =  Json.dumps(self, default=lambda o: o.__dict__,
-            sort_keys=True, indent=4)
-        return dump
-    def dict(self):
-        return Json.loads(self.toJSON())
 
 def read_file(path):
     with open(path,"r") as file:
@@ -73,7 +65,7 @@ def favicon():
 @app.route('/app_<string:app_id>')
 def app_page(app_id):
     app_folder = Path(TmpFolder, app_id)
-    app_folder.mkdir(exist_ok=True)
+    app_folder.mkdir(parents=True, exist_ok=True)
     graph = app_folder / f'{app_id}.svg'
     svg = None
     if graph.is_file():
@@ -85,29 +77,16 @@ CurrentPids = list()
 def show_graph(app_id):
     app_folder = Path(TmpFolder, app_id)
     graph = app_folder / f'{app_id}.svg'
-    org_graph = app_folder / f'{app_id}.dot'
     p_rosgraph = globals()[f"{app_id}"].find_process('rosgraph')
-    print(p_rosgraph.dict())
+
+    msg = Message()
+    msg.app_id = app_id
     if not p_rosgraph.state:
-        processes = pre_make_ros_graph(app_id, Path(TmpFolder / app_id))
-        while org_graph.is_file():
-            show_ros_graph(app_id)
-            break
-        # print(list(processes))
-        for n, id in processes:
-            p = globals()[f"{app_id}"].find_process(n)
-            p.set(pid=id, state=True)
-            # globals()[f"{app_id}"].update_process(n, dict(zip(["pid","state"], g)))
-    for p in globals()[f"{app_id}"].processes:
-        print("show_graph: ", p.dict())
-
-
-    print("show_graph graph path: ", graph)
+        socketio.emit('show_graph', msg.dict(), to = name_app_room(app_id))
     show_ros_graph(app_id)
     svg = None
     if graph.is_file():
         svg = open(str(graph)).read()
-        print("show_graph graph now")
     return jsonify(result=Markup(svg))
 
 @app.route('/app_<string:app_id>/pause_graph')
@@ -204,6 +183,18 @@ def on_join(msg):
     msg.data = f'Welcome [{pod_name}] ({request.sid}) join {get_rooms(socket_id)}'
     msg.count = session['receive_count']
     socketio.emit('show_log', msg.dict(), to = RoomWebName)
+
+@socketio.on('start_rosgrah')
+def register_web(msg):
+    m = Message(**msg)
+    print(m.processes)
+    for process in m.processes:
+        pr = Process(**process)
+        p = globals()[f"{m.app_id}"].find_process(pr.name)
+        if p:
+            p.set(pid=pr.pid, state=True)
+        else:
+            print(f"didn't find process [{pr.name}] in {m.app_id}")
 
 @socketio.event
 def my_ping():
