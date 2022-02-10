@@ -1,55 +1,52 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: chatter-foxy-listener
+  name: chatter-galactic-echo
   labels:
-    app: chatter-foxy
-    node: listener
-    namespace: chatter
+    app: chatter-galactic-pub-echo
+    node: echo
+    namespace: pub-echo
 spec:
   replicas: 1
   selector:
     matchLabels:
-      node: listener
+      node: echo
   template:
     metadata:
       labels:
-        node: listener
+        node: echo
       annotations:
-        k8s.v1.cni.cncf.io/networks: ros2-network
+        k8s.v1.cni.cncf.io/networks: rosmc-network
     spec:
       containers:
-      - name: chatter-foxy-listener
-        image: rachelwu/chatter:zenoh
-        args:
-          - "ros2"
-          - "launch"
-          - "chatter_cpp"
-          - "listener.launch.py"
+      - name: chatter-galactic-echo
+        image: rachelwu/ros:galactic
+        command: ["/bin/bash", "-c"]
+        args: ["source /opt/ros/galactic/setup.bash && ros2 topic echo /chatter"]
         env:
             -
               name: ROS_DOMAIN_ID
-              value: "43"
+              value: "42"
             - name: MY_POD_IP
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
       nodeSelector:
-            machine: nuc8
-# ---
-# apiVersion: v1
-# kind: Service
-# metadata:
-#   name: service-listener
-#   labels:
-#     app: chatter-foxy
-#     node: listener
-#     namespace: chatter
-# spec:
-#   # Start a headless service
-#   # https://kubernetes.io/docs/concepts/services-networking/service/#headless-services
-#   clusterIP: None
-#   ports:
-#     - port: 11311
-#   selector:
-#     node: listener
+            machine: sebastian-thinkpad-s1-yoga-12
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-echo
+  labels:
+    app: chatter-galactic-pub-echo
+    node: echo
+    namespace: pub-echo
+spec:
+  # Start a headless service
+  # https://kubernetes.io/docs/concepts/services-networking/service/#headless-services
+  clusterIP: None
+  ports:
+    - port: 11311
+  selector:
+    node: echo
