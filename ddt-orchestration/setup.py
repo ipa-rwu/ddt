@@ -13,8 +13,10 @@ setuptools.setup(
         'flask',
         'flask_sockets',
         'flask-socketio',
-        'pygraphviz'
-    ],
+        'pygraphviz',
+        'svg_stack',
+        'pydantic',
+        'svgwrite'],
     entry_points = {
     },
 )
