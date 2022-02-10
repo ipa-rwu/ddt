@@ -1,13 +1,7 @@
-import flask
-from flask import Flask, render_template, request, session, redirect, url_for, Markup, jsonify
+from flask import Flask, render_template, request, session, redirect, url_for, jsonify
 from flask_socketio import SocketIO, send, join_room, leave_room, emit, rooms
-import json as Json
 import logging
 from threading import Lock
-from pathlib import Path
-from functools import partial
-import svg_stack as ss
-from enum import Enum
 from pprint import pprint
 
 from ddt_orchestration.manager.action import make_ros_graph, update_rosmodels, combine_rosgraphs
@@ -152,13 +146,14 @@ def on_join(msg):
     pod_ip = m.pod_ip
     domain_id = m.domain_id
     socket_id = request.sid
-    if not (app_id in AppNames):
+    if name_app_obj(app_id) not in globals():
         # create a list per Room
         globals()[name_app_room(app_id)] = list()
         AppNames.append(app_id)
         # create an instance of Application
         globals()[name_app_obj(app_id)] = Application(name = app_id)
         join_room(name_app_room(app_id), sid = WebID)
+        RoomWeb.append(app_id)
         app.logger.info(f'Create a new application: {app_id}')
 
     if not (pod_id in globals()[name_app_obj(app_id)].all_pods()):
@@ -177,10 +172,10 @@ def on_join(msg):
         # app join Room_web
         join_room(RoomWebName, sid = socket_id)
         globals()[name_app_room(app_id)].append(pod_id)
-        RoomWeb.append(app_id)
-        app.logger.info(f'Welcome [{pod_id}] ({request.sid}) join {get_rooms(socket_id)}')
+        RoomWeb.append(pod_id)
         msg = Message()
-        msg.data = f'Welcome [{pod_id}] ({request.sid}) join {get_rooms(socket_id)}'
+        msg.data = f'Welcome [{pod_id}] ({request.sid}) join {get_rooms(socket_id)}, {globals()[name_app_room(app_id)]} are in the {name_app_room(app_id)}'
+        app.logger.info(msg.data)
         msg.count = session['receive_count']
         session['receive_count'] = session.get('receive_count', 0) + 1
         socketio.emit('show_log', msg.dict(), to = RoomWebName)
@@ -198,7 +193,6 @@ def started_rosgrah(msg):
             app.logger.info(f"Application {app_id}: {pod_id} started [{p.name} ({process['pid']})]")
         else:
             app.logger.error(f"Application {app_id}: {pod_id} didn't have process [{p.name}]")
-
 
 @socketio.on('started_rosmodel_parser')
 def started_rosmodel_parser(msg):
@@ -218,31 +212,33 @@ def started_rosmodel_parser(msg):
 def my_ping():
     emit('my_pong')
 
-# @socketio.event
-# def web_event(message):
-#     session['receive_count'] = session.get('receive_count', 0) + 1
-#     msg = Message()
-#     msg.data = message['data']
-#     msg.count = session['receive_count']
-#     emit('show_log', msg.dict())
-
 @socketio.on('leave')
-def on_leave(data):
-    js = Json.loads(data)
-    app_id = js["App"]
-    pod_id = js['Pod']
-    leave_room(app_id)
-    app.logger.info(f'{pod_id} has left the room {app_id}, {flask.request.sid}')
-    emit(f'leave_{app_id}', pod_id + ' has left the room.', to=app_id)
-
-
-# @socketio.on('message')
-# def on_message(msg):
-#     print('received message: ' + msg)
-#     endtime = time.time() + 5 # loop for 5 secs
-#     while time.time() < endtime:
-#         socketio.emit("custom event", f"The time is: {time.strftime('%H:%M:%S')}")
-#         socketio.sleep(1)
+def on_leave(msg):
+    m = Message(**msg)
+    app_id = m.app_id
+    pod_id = m.pod_id
+    app_model = globals()[name_app_obj(app_id)]
+    p = app_model.find_pod(pod_id)
+    leave_room(name_app_room(app_id), sid=p.socket_id)
+    leave_room(RoomWebName,  sid=p.socket_id)
+    # remove from the list of a room
+    room_list = globals()[name_app_room(app_id)]
+    room_list.remove(pod_id)
+    msg = Message()
+    msg.data = f'{pod_id} from [{m.app_id}] has left the [{name_app_room(m.app_id)}], {room_list} are still in the room.'
+    app.logger.info(msg.data)
+    # remove from model
+    app_model.remove_pod(p)
+    # remove pod folder
+    cleanup_folder(app_id, pod_id)
+    RoomWeb.remove(pod_id)
+    # no pods left, remove app
+    if not len(room_list):
+        cleanup_folder(app_id)
+        del globals()[name_app_obj(app_id)]
+        del globals()[name_app_room(app_id)]
+        RoomWeb.remove(app_id)
+    socketio.emit('show_log', msg.dict(), to = RoomWebName)
 
 if __name__=="__main__":
 

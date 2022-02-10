@@ -116,3 +116,11 @@ class Application(BaseModel):
         p = self.find_process(name)
         p.set(**kwargs)
         print(p.dict())
+    def remove_pod(self, pod):
+        _pod = pod
+        if type(pod) is str:
+            _pod = self.find_pod(pod)
+        if _pod:
+            self.pods.remove(pod)
+        else:
+            logging.ERROR(f'Could not find {pod}, so cannot delete')
