@@ -179,13 +179,11 @@ def on_join(msg):
         globals()[name_app_room(app_id)].append(pod_id)
         RoomWeb.append(app_id)
         app.logger.info(f'Welcome [{pod_id}] ({request.sid}) join {get_rooms(socket_id)}')
-
-    session['receive_count'] = session.get('receive_count', 0) + 1
-    msg = Message()
-    msg.data = f'Welcome [{pod_id}] ({request.sid}) join {get_rooms(socket_id)}'
-    msg.count = session['receive_count']
-    pprint(globals()[name_app_obj(app_id)].dict())
-    socketio.emit('show_log', msg.dict(), to = RoomWebName)
+        msg = Message()
+        msg.data = f'Welcome [{pod_id}] ({request.sid}) join {get_rooms(socket_id)}'
+        msg.count = session['receive_count']
+        session['receive_count'] = session.get('receive_count', 0) + 1
+        socketio.emit('show_log', msg.dict(), to = RoomWebName)
 
 @socketio.on('started_rosgrah')
 def started_rosgrah(msg):
