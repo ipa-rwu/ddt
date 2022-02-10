@@ -13,7 +13,9 @@ from pathlib import Path
 import os
 from ddt_orchestration.utils import *
 from ddt_orchestration.model import Node
+import svg_stack as ss
 import svgwrite
+from flask import Markup
 
 def start_command(command):
     print("Start command: ", command)
@@ -53,7 +55,10 @@ def rewrite_dot(dot_path, name, prefix):
     org_pt = Path(dot_path).resolve()
     new_pt = org_pt.parent / f'{name}.svg'
     if org_pt.is_file:
-        ros_gh = pgv.AGraph(org_pt)
+        try:
+            ros_gh = pgv.AGraph(org_pt)
+        except pgv.agraph.DotError:
+            logging.ERROR(f'{org_pt.name} of {org_pt.parent.name} from {org_pt.parent.parent.name} is not ready!')
         for node in ros_gh.nodes():
             node.attr["URL"] = create_url(prefix, node.attr["URL"])
         ros_gh.draw(path=new_pt, prog='dot', format='svg' )
@@ -89,12 +94,15 @@ def show_svg(path):
 def combine_rosgraphs(app_obj):
     merged_svgs = ss.Document()
     v_layout = ss.VBoxLayout()
+    domain_list = list()
     for pod in app_obj.pods:
-        pod_domain = create_domain_svg(app_obj.name, pod.name, pod.domain_id)
-        pod_rosgraph = get_pod_rosgraph_path(app_obj.name, pod.name)
-        if pod_rosgraph.is_file() and pod_domain.is_file():
-            v_layout.addSVG(str(pod_domain.resolve()), alignment=ss.AlignCenter)
-            v_layout.addSVG(str(pod_rosgraph.resolve()), alignment=ss.AlignCenter)
+        if pod.domain_id not in domain_list:
+            domain_list.append(pod.domain_id)
+            pod_domain = create_domain_svg(app_obj.name, pod.name, pod.domain_id)
+            pod_rosgraph = get_pod_rosgraph_path(app_obj.name, pod.name)
+            if pod_rosgraph.is_file() and pod_domain.is_file():
+                v_layout.addSVG(str(pod_domain.resolve()), alignment=ss.AlignCenter)
+                v_layout.addSVG(str(pod_rosgraph.resolve()), alignment=ss.AlignCenter)
     merged_svgs.setLayout(v_layout)
     merged_svgs.save(get_app_rosgraph_path(app_obj.name))
     return show_svg(get_app_rosgraph_path(app_obj.name))
