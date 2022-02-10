@@ -1,7 +1,5 @@
 #! /usr/bin/env python3
 import subprocess
-import threading
-import traceback
 from pathlib import Path
 
 import rclpy
@@ -12,7 +10,7 @@ from rqt_graph.rosgraph2_impl import Graph
 from qt_dotgraph.pydotfactory import PydotFactory
 
 import rclpy.node
-class ParserNode(rclpy.node.Node):
+class ParserGraph(rclpy.node.Node):
     def __init__(self):
         super().__init__('graph_parser')
 
@@ -66,7 +64,7 @@ class ParserNode(rclpy.node.Node):
 
 def main():
     rclpy.init()
-    node = ParserNode()
+    node = ParserGraph()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
