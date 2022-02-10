@@ -1,6 +1,7 @@
 from pathlib import Path
 from enum import Enum
 from flask_socketio import rooms
+from shutil import rmtree
 
 AppNames = list()
 Apps = list()
@@ -70,3 +71,9 @@ def name_app_obj(app):
 
 def name_pod_obj(pod):
     return f'pod_{pod}'
+
+def cleanup_folder(app_id, pod_id=None):
+    if pod_id:
+        rmtree(str(get_pod_folder(app_id,pod_id)), ignore_errors=True)
+    else:
+        rmtree(str(get_app_folder(app_id)), ignore_errors=True)

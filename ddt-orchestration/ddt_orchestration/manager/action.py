@@ -35,7 +35,6 @@ def start_zenoh(host):
 
 def get_ros_graph(pod, folder_path):
     pid_graph_creator = start_command(f"ros2 launch ros2_graph_quest gen_dot.launch.py application_name:=\"{pod}\" result_path:=\"{folder_path}\" sampling_rate:=\"1\"")
-    print(pid_graph_creator)
     return pid_graph_creator
 
 def get_ros_model(app_folder_path):
