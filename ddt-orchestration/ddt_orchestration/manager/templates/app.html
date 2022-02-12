@@ -1,34 +1,52 @@
 {% extends "index.html" %}
+{% block header %}
+{{ super() }}
+<script type="text/javascript" src="/static/js/functions.js"></script>
+{% endblock  %}
 {% block context %}
 <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
 <script type=text/javascript>
-        $(function() {
-          $('a#show_graph').on('click', function(e) {
-            e.preventDefault()
-            $.getJSON('/app_{{ appid }}/show_graph',
-                function(data) {
-                    $('#ros_graph').html( data.result )
-                });
-            return false;
-          });
-        });
-</script>
-<script type=text/javascript>
-    $(function() {
-      $('a#pause_graph').on('click', function(e) {
-        e.preventDefault()
-        $.getJSON('/app_{{ appid }}/pause_graph',
+
+  $(function(){
+  var showing = null,
+      interval = 1000
+
+    $("#show_graph_button").on('click', function(e) {
+      e.preventDefault()
+      console.log("click!!!!");
+      if (showing !== null) return;
+      console.log("start!!!!");
+      showing = setInterval(function () {
+          $.getJSON('/app_{{ app_id }}/show_graph',
             function(data) {
-          console.log("pause_graph")
-          console.log(data)
-        });
-        return false;
+              console.log("show_graph")
+              $('#ros_graph').html( data.result )
+            })
+            return false;
+        }, interval);
       });
-    });
+
+      $("#pause_graph_button").on('click', function(e) {
+        console.log("stop!!!!")
+        clearInterval(showing);
+        showing = null
+        $.getJSON('/app_{{ app_id }}/pause_graph',
+        function(data) {
+          console.log("send stop")
+          });
+          return false;
+      });
+
+  });
 </script>
+
 <div class="btn-group">
-    <a href=# id=show_graph><button style="width:50%">Show ROS Graph</button></a>
-    <a href=# id=pause_graph><button style="width:50%">Pause ROS Graph Update</button></a>
+    <a href=# id=show_graph>
+      <button id=show_graph_button style="width:50%" onclick="disable_button('show_graph_button')" value="1">Show ROS Graph</button>
+    </a>
+    <a href=# id=pause_graph>
+      <button id=pause_graph_button style="width:50%; background-color:#616161" onclick="disable_button('pause_graph_button')" value="0">Pause ROS Graph Update </button>
+    </a>
   </div>
 <p>
 
@@ -37,4 +55,5 @@
 <section id="ros_graph">
     {{ ros_graph }}
 </section>
+
 {% endblock  %}

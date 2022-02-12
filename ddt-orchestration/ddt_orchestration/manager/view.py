@@ -4,7 +4,7 @@ import logging
 from threading import Lock
 from pprint import pprint
 
-from ddt_orchestration.manager.action import make_ros_graph, update_rosmodels, combine_rosgraphs
+from ddt_orchestration.manager.action import make_ros_graph, update_rosmodels, combine_rosgraphs, show_svg
 from ddt_orchestration.model import Application, Pod, Message, Process
 from ddt_orchestration.utils import *
 
@@ -36,13 +36,15 @@ def favicon():
 
 @app.route('/app_<string:app_id>')
 def app_page(app_id):
+    res= ""
+    app_graph_path = get_app_rosgraph_path(app_id)
+    if app_graph_path.is_file():
+        res = show_svg(app_graph_path)
     try:
         app_model = globals()[name_app_obj(app_id)]
-        res = combine_rosgraphs(app_obj=app_model)
-        return render_template('app.html', appid=app_id, ros_graph =res)
     except KeyError:
         app.logger.info(f"Model: {name_app_obj(app_id)} doesn't register yet")
-        return render_template('app.html', appid=app_id, ros_graph = None)
+    return render_template('app.html', app_id=app_id, ros_graph = res)
 
 
 CurrentPids = list()
@@ -58,11 +60,11 @@ def show_graph(app_id):
         msg.pod_id = pod_id
         if not pod_ros_graph_process.state:
             app.logger.info(f'Trigger pod [{pod_id} start "ROS Graph maker"]')
-            socketio.emit('show_graph', msg.dict(), to = name_app_room(app_id))
+            socketio.emit('show_graph', msg.dict(), to = pod.socket_id)
         pod_rosmodel_process = pod.find_process(ProcessList.NodeParserProcess.name)
         if not pod_rosmodel_process.state:
             app.logger.info(f'Trigger pod [{pod_id} start "ROS Node Parser"]')
-            socketio.emit('get_node_model', msg.dict(), to = name_app_room(app_id))
+            socketio.emit('get_node_model', msg.dict(), to = pod.socket_id)
         update_ros_graph(app_id, pod_id)
         app_model.find_pod(pod_id).nodes = list()
         app_model.add_nodes(pod_id, update_rosmodels(app_id, pod_id))
@@ -86,16 +88,16 @@ def pause_graph(app_id):
 """
 Click topic
 """
-@app.route('/app_<string:app_id>/topic_<topic_id>/')
-def node(app_id, topic_id):
-    return redirect(url_for('app_page', app_id=app_id))
+@app.route('/app_<string:app_id>/<pod_id>/topic_<topic_id>/')
+def node(app_id, pod_id, topic_id):
+    return redirect(url_for('app_page', app_id=app_id, pod_id = pod_id, topic_id = topic_id))
 
 """
 Click node
 """
-@app.route('/app_<string:app_id>/__<node_id>/')
-def topic(app_id, node_id):
-    return redirect(url_for('app_page', app_id=app_id))
+@app.route('/app_<string:app_id>/<pod_id>/__<node_id>/')
+def topic(app_id, pod_id, node_id):
+    return redirect(url_for('app_page', app_id=app_id, pod_id = pod_id, node_id = node_id))
 
 def monitor_applist_thread():
     """Example of how to send server generated events to clients."""
@@ -158,7 +160,6 @@ def on_join(msg):
 
     if not (pod_id in globals()[name_app_obj(app_id)].all_pods()):
         # create an instance of Pod
-        # globals()[f"{pod_id}"] = Pod(pod_id, pod_ip, socket_id)
         def get_process():
             for name in ProcessList.list():
                 yield Process(name=name)
@@ -238,6 +239,7 @@ def on_leave(msg):
         del globals()[name_app_obj(app_id)]
         del globals()[name_app_room(app_id)]
         RoomWeb.remove(app_id)
+        AppNames.remove(app_id)
     socketio.emit('show_log', msg.dict(), to = RoomWebName)
 
 if __name__=="__main__":
