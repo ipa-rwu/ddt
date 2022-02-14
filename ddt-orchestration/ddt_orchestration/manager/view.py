@@ -5,8 +5,9 @@ from threading import Lock
 from pprint import pprint
 
 from ddt_orchestration.manager.action import make_ros_graph, update_rosmodels, combine_rosgraphs, show_svg
-from ddt_orchestration.model import Application, Pod, Message, Process
+from ddt_orchestration.model import Application, DebugElement, Pod, Message, Process
 from ddt_orchestration.utils import *
+from matplotlib.pyplot import show
 
 app = Flask(__name__)
 
@@ -34,20 +35,28 @@ def home():
 def favicon():
     return 'dummy', 200
 
-@app.route('/app_<string:app_id>')
+@app.route('/app_<string:app_id>', methods=["POST","GET"])
 def app_page(app_id):
     res= ""
     app_graph_path = get_app_rosgraph_path(app_id)
+    debug_list = globals()[name_select_nodes(app_id)]
+
     if app_graph_path.is_file():
         res = show_svg(app_graph_path)
+    button_show_graph = True
     try:
         app_model = globals()[name_app_obj(app_id)]
+        for pod, proc in app_model.find_processes(ProcessList.RosGraphProcess.name):
+            if proc.state:
+                button_show_graph = False
     except KeyError:
         app.logger.info(f"Model: {name_app_obj(app_id)} doesn't register yet")
-    return render_template('app.html', app_id=app_id, ros_graph = res)
+    return render_template('app.html', app_id=app_id,
+                                        ros_graph = res,
+                                        debug_list = debug_list,
+                                        button_show_graph = button_show_graph)
 
 
-CurrentPids = list()
 @app.route('/app_<string:app_id>/show_graph')
 def show_graph(app_id):
     app_model = globals()[name_app_obj(app_id)]
@@ -59,10 +68,14 @@ def show_graph(app_id):
         msg.app_id = app_id
         msg.pod_id = pod_id
         if not pod_ros_graph_process.state:
+            # if app_graph_path.is_file():
+            #     return jsonify(result=show_svg(app_graph_path))
             app.logger.info(f'Trigger pod [{pod_id} start "ROS Graph maker"]')
             socketio.emit('show_graph', msg.dict(), to = pod.socket_id)
         pod_rosmodel_process = pod.find_process(ProcessList.NodeParserProcess.name)
         if not pod_rosmodel_process.state:
+            # if app_graph_path.is_file():
+            #     return jsonify(result=show_svg(app_graph_path))
             app.logger.info(f'Trigger pod [{pod_id} start "ROS Node Parser"]')
             socketio.emit('get_node_model', msg.dict(), to = pod.socket_id)
         update_ros_graph(app_id, pod_id)
@@ -73,31 +86,81 @@ def show_graph(app_id):
     res = combine_rosgraphs(app_obj=app_model)
     return jsonify(result=res)
 
-@app.route('/app_<string:app_id>/pause_graph')
-def pause_graph(app_id):
+def stop_process(app_id):
     for target in [ProcessList.RosGraphProcess.name, ProcessList.RosGraphProcess.name, ProcessList.NodeParserProcess.name]:
         for pod, process in globals()[name_app_obj(app_id)].find_processes(target):
             msg = Message()
             setattr(msg, pod.name, process.pid)
-            app.logger.info(f"Stop process in {app_id}: {process.name} from {pod.name}")
+            # app.logger.info(f"Stop process in {app_id}: {process.name} from {pod.name}")
             if process.state:
                 socketio.emit('pause_graph', msg.dict(), to = name_app_room(app_id))
                 process.stop()
+
+@app.route('/app_<string:app_id>/pause_graph')
+def pause_graph(app_id):
+    stop_process(app_id)
     return ("nothing")
 
 """
 Click topic
 """
-@app.route('/app_<string:app_id>/<pod_id>/topic_<topic_id>/')
-def node(app_id, pod_id, topic_id):
-    return redirect(url_for('app_page', app_id=app_id, pod_id = pod_id, topic_id = topic_id))
+@app.route('/app_<string:app_id>/<pod_id>/topic_<topic_id>/add')
+def add_topic(app_id, pod_id, topic_id):
+    stop_process(app_id)
+    return redirect(url_for('app_page', app_id=app_id))
+
 
 """
-Click node
+ignore rosgraph node
 """
-@app.route('/app_<string:app_id>/<pod_id>/__<node_id>/')
-def topic(app_id, pod_id, node_id):
-    return redirect(url_for('app_page', app_id=app_id, pod_id = pod_id, node_id = node_id))
+@app.route('/app_<string:app_id>/<pod_id>/__rosgraph_creator/add', methods=['GET', 'POST'])
+def ignore_node(app_id, pod_id):
+    stop_process(app_id)
+    return redirect(url_for('app_page', app_id=app_id))
+
+"""
+add debug node
+"""
+@app.route('/app_<string:app_id>/<pod_id>/__<node_id>/add', methods=['GET', 'POST'])
+def add_node(app_id, pod_id, node_id):
+    stop_process(app_id)
+    app.logger.info(f'Select debugging node [{node_id}] from pod [{pod_id}]')
+    debug_instance = DebugElement(pod=pod_id, node=node_id)
+    # return jsonify(result=debug_instance.json())
+    try:
+        debug_list = globals()[name_select_nodes(app_id)]
+        if not debug_instance in debug_list:
+            debug_list.append(debug_instance)
+    except KeyError:
+        app.logger.error(f'debug list {app_id} is not registered yet')
+    return redirect(url_for('app_page', app_id=app_id))
+
+"""
+delete node
+"""
+@app.route('/app_<string:app_id>/<pod_id>/__<node_id>/delete', methods=['GET', 'POST'])
+def delete_debug_node(app_id, pod_id, node_id):
+    app.logger.info(f'Deleting debugging node [{node_id}] from pod [{pod_id}]')
+    delete_debug_instance = DebugElement(pod=pod_id, node=node_id)
+    # return jsonify(result=debug_instance.json())
+    try:
+        debug_list = globals()[name_select_nodes(app_id)]
+        if  delete_debug_instance in debug_list:
+            debug_list.remove(delete_debug_instance)
+    except KeyError:
+        app.logger.error(f'debug list {app_id} is not registered yet')
+    return redirect(url_for('app_page', app_id=app_id))
+
+"""
+handle debug list
+"""
+@app.route('/app_<string:app_id>/debug', methods=['GET','POST'])
+def handle_debug(app_id):
+    if request.method == 'POST':
+        for l in get_list(('debug_pod', 'debug_node')):
+            ele = DebugElement(node=l['debug_node'], pod=l['debug_pod'])
+            globals()[name_app_obj(app_id)].debug.append(ele)
+    return redirect(url_for('app_page', app_id=app_id))
 
 def monitor_applist_thread():
     """Example of how to send server generated events to clients."""
@@ -118,7 +181,6 @@ def on_connect():
     msg.data = f"Client ({request.sid}) connect to DDT Manager"
     session['receive_count'] = session.get('receive_count', 0) + 1
     msg.count = session['receive_count']
-    app.logger.info(f"{msg.dict()}")
     socketio.emit('show_log', msg.dict())
 
 """
@@ -134,7 +196,6 @@ def register_web(msg):
     msg.data = f"Welcome [Web Interface] ({WebID}) join {get_rooms(WebID)}."
     session['receive_count'] = session.get('receive_count', 0) + 1
     msg.count = session['receive_count']
-    print(msg.toJSON())
     socketio.emit('show_log', msg.dict(), to=RoomWebName)
 
 """
@@ -154,6 +215,7 @@ def on_join(msg):
         AppNames.append(app_id)
         # create an instance of Application
         globals()[name_app_obj(app_id)] = Application(name = app_id)
+        globals()[name_select_nodes(app_id)] = list()
         join_room(name_app_room(app_id), sid = WebID)
         RoomWeb.append(app_id)
         app.logger.info(f'Create a new application: {app_id}')
@@ -209,9 +271,9 @@ def started_rosmodel_parser(msg):
     else:
         app.logger.error(f"Application {app_id}: {pod_id} didn't have process [{process_name}]")
 
-@socketio.event
-def my_ping():
-    emit('my_pong')
+# @socketio.event
+# def my_ping():
+#     emit('my_pong')
 
 @socketio.on('leave')
 def on_leave(msg):
@@ -238,6 +300,7 @@ def on_leave(msg):
         cleanup_folder(app_id)
         del globals()[name_app_obj(app_id)]
         del globals()[name_app_room(app_id)]
+        del globals()[name_select_nodes(app_id)]
         RoomWeb.remove(app_id)
         AppNames.remove(app_id)
     socketio.emit('show_log', msg.dict(), to = RoomWebName)

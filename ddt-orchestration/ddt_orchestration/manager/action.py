@@ -47,7 +47,7 @@ def pause_ros_graph(pids):
         stop_command(pid)
 
 def create_url(prefix, name):
-    url = f'/{prefix}/{name}'
+    url = f'/{prefix}/{name}/add'
     return url
 
 def rewrite_dot(dot_path, name, prefix):
@@ -57,7 +57,7 @@ def rewrite_dot(dot_path, name, prefix):
         try:
             ros_gh = pgv.AGraph(org_pt)
         except pgv.agraph.DotError:
-            logging.ERROR(f'{org_pt.name} of {org_pt.parent.name} from {org_pt.parent.parent.name} is not ready!')
+            logging.error(f'{org_pt.name} of {org_pt.parent.name} from {org_pt.parent.parent.name} is not ready!')
         for node in ros_gh.nodes():
             node.attr["URL"] = create_url(prefix, node.attr["URL"])
         ros_gh.draw(path=new_pt, prog='dot', format='svg' )

@@ -2,6 +2,7 @@ from pathlib import Path
 from enum import Enum
 from flask_socketio import rooms
 from shutil import rmtree
+from flask import request
 
 AppNames = list()
 Apps = list()
@@ -77,3 +78,14 @@ def cleanup_folder(app_id, pod_id=None):
         rmtree(str(get_pod_folder(app_id,pod_id)), ignore_errors=True)
     else:
         rmtree(str(get_app_folder(app_id)), ignore_errors=True)
+
+def name_select_nodes(app):
+    return f'debug_nodenames_{app}'
+
+def get_list(headers):
+    values = [request.form.getlist(h) for h in headers]
+    items = [{} for i in range(len(values[0]))]
+    for x,i in enumerate(values):
+        for _x,_i in enumerate(i):
+            items[_x][headers[x]] = _i
+    return items

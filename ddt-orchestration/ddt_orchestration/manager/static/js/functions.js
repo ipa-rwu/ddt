@@ -8,7 +8,6 @@ function disable_button(id) {
   else{
     other_name = "show_graph_button"
   }
-  console.log(element);
   var b = document.getElementById(other_name);
   if (element.value == "1"){
     if (id == "show_graph_button"){
@@ -16,9 +15,7 @@ function disable_button(id) {
     }
     element.style.backgroundColor = grey;
     element.value = "0";
-    console.log("change to grey");
     b.value  = "1";
-    // b.style.setProperty('background-color', green);
     b.style.backgroundColor = green
   }
 }

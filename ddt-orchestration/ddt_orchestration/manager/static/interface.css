@@ -56,6 +56,16 @@ body {
   clear: both;
 }
 
+.buttonstyle {
+  background-color: #5f635f; /* Green */
+  border: none;
+  color: white;
+  padding: 15px 32px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+ }
 .button {
   background-color: #4CAF50; /* Green */
   border: none;
@@ -95,6 +105,7 @@ li a:hover:not(.active) {
   color: white;
 }
 
+
 .btn-group button {
   background-color: #04aa6d; /* Green background */
   border: 1px solid green; /* Green border */
@@ -102,6 +113,10 @@ li a:hover:not(.active) {
   padding: 10px 24px; /* Some padding */
   cursor: pointer; /* Pointer/hand icon */
   float: left; /* Float the buttons side by side */
+}
+
+.btn-group button.button_grey {
+  background-color: #696b69;
 }
 
 .btn-group button:not(:last-child) {
@@ -116,6 +131,10 @@ li a:hover:not(.active) {
 }
 
 /* Add a background color on hover */
-.btn-group button:hover {
+/* .btn-group button:hover {
   background-color: #3e8e41;
+} */
+
+.btn-group.button.selected{
+  background-color: #696b69;
 }
