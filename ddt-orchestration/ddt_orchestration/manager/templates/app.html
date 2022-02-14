@@ -13,13 +13,13 @@
 
     $("#show_graph_button").on('click', function(e) {
       e.preventDefault()
-      console.log("click!!!!");
+      //console.log("click!!!!");
       if (showing !== null) return;
-      console.log("start!!!!");
+      //console.log("start!!!!");
       showing = setInterval(function () {
           $.getJSON('/app_{{ app_id }}/show_graph',
             function(data) {
-              console.log("show_graph")
+              //console.log("show_graph")
               $('#ros_graph').html( data.result )
             })
             return false;
@@ -27,12 +27,12 @@
       });
 
       $("#pause_graph_button").on('click', function(e) {
-        console.log("stop!!!!")
+        //console.log("stop!!!!")
         clearInterval(showing);
         showing = null
         $.getJSON('/app_{{ app_id }}/pause_graph',
         function(data) {
-          console.log("send stop")
+          //console.log("send stop")
           });
           return false;
       });
@@ -40,14 +40,26 @@
   });
 </script>
 
+{% if button_show_graph is true %}
 <div class="btn-group">
-    <a href=# id=show_graph>
-      <button id=show_graph_button style="width:50%" onclick="disable_button('show_graph_button')" value="1">Show ROS Graph</button>
-    </a>
-    <a href=# id=pause_graph>
-      <button id=pause_graph_button style="width:50%; background-color:#616161" onclick="disable_button('pause_graph_button')" value="0">Pause ROS Graph Update </button>
-    </a>
-  </div>
+  <a href=# id=show_graph>
+    <button id=show_graph_button style="width:50%" onclick="disable_button('show_graph_button')" value="1">Show ROS Graph</button>
+  </a>
+  <a href=# id=pause_graph>
+    <button id=pause_graph_button style="width:50%; background-color:#616161" onclick="disable_button('pause_graph_button')" value="0">Pause ROS Graph Update </button>
+  </a>
+</div>
+{% else %}
+<div class="btn-group">
+  <a href=# id=show_graph>
+    <button id=show_graph_button style="width:50%; background-color:#616161" onclick="disable_button('show_graph_button')" value="0">Show ROS Graph</button>
+  </a>
+  <a href=# id=pause_graph>
+    <button id=pause_graph_button style="width:50%; background-color:#04aa6d" onclick="disable_button('pause_graph_button')" value="1">Pause ROS Graph Update </button>
+  </a>
+</div>
+{% endif %}
+
 <p>
 
 </p>
@@ -56,4 +68,30 @@
     {{ ros_graph }}
 </section>
 
+<p></p>
+
+<section id="node_id">
+<p>Selected debugging nodes:</p>
+<p></p>
+
+
+{% for node_id, pod_id in debug_list %}
+{% set nodeID =  node_id[1] %}
+{% set podID =  pod_id[1] %}
+<form id="delete" method=post action="{{ url_for('delete_debug_node', app_id=app_id, node_id = nodeID, pod_id = podID) }}">
+    <td name="id_{{ nodeID }}" style="display: inline;" >{{ nodeID }}</td>
+    <button type=submit style="display: inline;" >Delete</button>
+</form>
+{% endfor %}
+
+<form id="submit_debug_list" method=post action="{{ url_for('handle_debug', app_id=app_id) }}">
+{% for node_id, pod_id in debug_list %}
+{% set nodeID =  node_id[1] %}
+{% set podID =  pod_id[1] %}
+<input type="hidden" name="debug_pod" value="{{ podID }}" />
+<input type="hidden" name="debug_node" value="{{ nodeID }}" />
+{% endfor %}
+<input type="submit" value="Submit">
+</form>
+</section>
 {% endblock  %}

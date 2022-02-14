@@ -76,9 +76,14 @@ class Pod(BaseModel):
                 return p
 
 
+class DebugElement(BaseModel):
+    node: str
+    pod: str
+
 class Application(BaseModel):
     name: str
     pods : List[Pod] = list()
+    debug: List[DebugElement] = list()
     class Config:
         arbitrary_types_allowed = True
     def add_pod(self, pod):
@@ -98,11 +103,18 @@ class Application(BaseModel):
         pod = self.find_pod(pod_id)
         for node in nodes:
             pod.add_node(node)
-    def find_node(self, node_name):
-        for pod in self.pods:
+    def add_debug_ele(self, elemenent):
+        self.debug.append(elemenent)
+    def find_node(self, node_name, pod_name=None):
+        def _find_node(pod):
             for node in pod.nodes:
                 if node.name == node_name:
                     return pod, node
+        if pod_name is None:
+            for pod in self.pods:
+                _find_node(pod)
+        else:
+            _find_node(self.find_pod(pod_name))
     def find_processes(self, name):
         for pod in self.pods:
             for process in pod.processes:
