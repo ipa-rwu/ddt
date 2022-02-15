@@ -11,7 +11,7 @@ def generate_launch_description():
     sampling_rate = LaunchConfiguration('sampling_rate')
     logger = LaunchConfiguration("log_level")
 
-    declare_result_path = DeclareLaunchArgument('result_path', default_value=str(Path.home()))
+    declare_result_path = DeclareLaunchArgument('result_path', default_value=str(Path.home()/ 'tmp' / 'node_parser'))
     declare_sampling_rate = DeclareLaunchArgument('sampling_rate', default_value="10")
     declare_log_level = DeclareLaunchArgument("log_level", default_value=["WARN"], description="Logging level")
 

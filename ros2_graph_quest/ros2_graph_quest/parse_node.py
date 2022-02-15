@@ -66,8 +66,8 @@ class ParserNodes(rclpy.node.Node):
 
         self.result_path = Path(self.get_parameter('result_path').get_parameter_value().string_value).resolve()
         if self.result_path is None or self.result_path =="":
-            self.result_path = Path.home() / 'test'
-            self.result_path.mkdir(exist_ok=True)
+            self.result_path = Path.home() / 'tmp' / 'node_parser'
+        self.result_path.mkdir(parents=True, exist_ok=True)
         self.timer = self.create_timer(self.get_parameter('sampling_rate').value, self.timer_callback)
 
         self.get_logger().info(f"Path: {self.result_path}")
@@ -75,7 +75,7 @@ class ParserNodes(rclpy.node.Node):
     def timer_callback(self):
         node_names = get_node_names(node=self)
         folder = Path(self.result_path.resolve())
-        # rmtree(folder, ignore_errors=True)
+        rmtree(folder, ignore_errors=True)
         for n in node_names:
             # new_n = parse_node_name(n.name)
             # self.get_logger().info(f"raw name: {n.name}, {n.namespace}, {n.full_name}")
