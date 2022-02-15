@@ -7,7 +7,6 @@ from pprint import pprint
 from ddt_orchestration.manager.action import make_ros_graph, update_rosmodels, combine_rosgraphs, show_svg
 from ddt_orchestration.model import Application, DebugElement, Pod, Message, Process
 from ddt_orchestration.utils import *
-from matplotlib.pyplot import show
 
 app = Flask(__name__)
 
