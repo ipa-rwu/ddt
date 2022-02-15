@@ -25,6 +25,7 @@ setup(
         'console_scripts': [
             'graph_parser = ros2_graph_quest.parse_graph:main',
             'node_parser = ros2_graph_quest.parse_node:main',
+            'lifecycle_node_parser = ros2_graph_quest.parse_lifecycle:main '
         ],
     },
 )
