@@ -844,7 +844,6 @@ class RosGraphDotcodeGenerator:
                     unreachable=unreachable)
 
         for e in edges:
-            print("generate_dotgraph, _add_edge")
             self._add_edge(
                 e, dotcode_factory, dotgraph=dotgraph, is_topic=(graph_mode == NODE_NODE_GRAPH))
 

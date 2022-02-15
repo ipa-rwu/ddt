@@ -11,13 +11,16 @@ setuptools.setup(
     install_requires=[
         'python-socketio[asyncio_client]',
         'flask',
-        'flask_sockets',
+        'flask-sockets',
         'flask-socketio',
         'pygraphviz',
         'svg_stack',
         'pydantic',
         'svgwrite',
-        'ros2-model'],
+        'ros2-model',
+        # fix svf-stcak
+        'six',
+        'lxml'],
     entry_points = {
     },
 )
