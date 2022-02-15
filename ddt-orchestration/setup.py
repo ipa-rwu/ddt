@@ -16,7 +16,8 @@ setuptools.setup(
         'pygraphviz',
         'svg_stack',
         'pydantic',
-        'svgwrite'],
+        'svgwrite',
+        'ros2-model'],
     entry_points = {
     },
 )

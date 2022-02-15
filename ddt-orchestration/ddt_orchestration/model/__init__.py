@@ -2,7 +2,7 @@ from pydantic import BaseModel, ValidationError
 import json as Json
 from typing import List, Optional
 import logging
-
+from ros2_model import Node, LifeCycleAction, LifeCycleNode
 class Message:
     def __init__(self, **my_dict):
         for key in my_dict:
@@ -13,21 +13,6 @@ class Message:
         return dump
     def dict(self):
         return Json.loads(self.toJSON())
-
-class Interface(BaseModel):
-    name: str
-    types: List[str]
-
-class Node(BaseModel):
-    name: str
-    namespace: str
-    full_name : str
-    publishers:      List[Interface]=list()
-    subscribers:     List[Interface]=list()
-    action_servers:  List[Interface]=list()
-    action_clients:  List[Interface]=list()
-    service_servers: List[Interface]=list()
-    service_clients: List[Interface]=list()
 
 class Process(BaseModel):
     name: str

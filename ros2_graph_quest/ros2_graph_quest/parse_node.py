@@ -7,8 +7,7 @@ from ros2node.api import get_publisher_info
 from ros2node.api import get_service_client_info
 from ros2node.api import get_service_server_info
 from ros2node.api import get_subscriber_info
-from ros2node.api import parse_node_name
-from ros2_graph_quest.rosmodel import Node, Interface
+from ros2_model import Node, Interface
 from pathlib import Path
 from shutil import rmtree
 
