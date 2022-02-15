@@ -10,6 +10,6 @@ if [ ! -d venv ]; then
     ${pycmd:?Could not determine python executable} -mvenv venv
 fi
 
+venv/*/pip install --find-links wheels -e ros2-model
+venv/*/pip install --find-links wheels -e ros2-helpers
 venv/*/pip install --find-links wheels -e ddt-orchestration
-venv/*/pip install --find-links wheels -e ros-model
-

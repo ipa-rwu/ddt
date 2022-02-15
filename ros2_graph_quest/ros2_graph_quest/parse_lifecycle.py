@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 from ros2lifecycle.api import get_node_names
 from ros2_graph_quest.lifecycle import call_get_states, call_get_available_transitions
-from ros_model import LifeCycleNode,LifeCyclePrimaryState, NodeArgs, LifeCycleAction, LifeCycleActionsEnum
+from ros2_model import LifeCycleNode,LifeCyclePrimaryState, NodeArgs, LifeCycleAction, LifeCycleActionsEnum
 from pathlib import Path
 from shutil import rmtree
 import argparse
