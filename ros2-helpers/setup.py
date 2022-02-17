@@ -15,7 +15,11 @@ setuptools.setup(
         'pyyaml',
         'netifaces',
         'packaging',
-        'ros2-model'],
+        'ros2-model',
+        'Click'],
     entry_points = {
+        'console_scripts': [
+            'ros2helper = ros2_helpers:cli',
+        ],
     },
 )
