@@ -6,10 +6,12 @@ from pathlib import Path
 
 from ddt_utils.model import Message
 from ddt_utils.utils import get_pod_folder
+from ddt_utils.utils import ProcessList
 
 from ddt_probe.action import get_ros_model
 from ddt_probe.action import stop_command
-from ddt_probe.action import pre_make_ros_graph
+from ddt_probe.action import get_ros_graph
+from ddt_probe.action import get_lifecycle_nodes
 
 sio = socketio.AsyncClient(handle_sigint=False)
 
@@ -18,36 +20,46 @@ async def connect():
     logging.info(f'connected to server')
     await register()
 
-@sio.on('show_graph')
+def start_process(app_id, pod_id, processes):
+    new_msg = Message()
+    ps = [dict(zip(("name", "pid"), (name, proc.pid))) for name, proc in processes]
+    logging.info(f'{pod_id} from {app_id} start processes: {ps}')
+    new_msg.processes = ps
+    new_msg.app_id = app_id
+    new_msg.pod_id = pod_id
+    return new_msg
+
+@sio.on(ProcessList.RosGraphProcess.value)
 async def show_graph(msg):
     m = Message(**msg)
-    logging.info(f'show_graph: get message: {m.dict()}')
-
     app_id = PodInfo.app_id
     pod_id = PodInfo.pod_id
     if m.app_id == app_id and m.pod_id == pod_id:
-        processes = pre_make_ros_graph(pod_id, Path(get_pod_folder(app_id, pod_id)))
-        new_msg = Message()
-        ps = [dict(zip(("name", "pid"), (name, proc.pid))) for name, proc in processes]
-        logging.info(f'{pod_id} from {app_id} start showing graph, processes: {ps}')
-        new_msg.processes = ps
-        new_msg.app_id = app_id
-        new_msg.pod_id = pod_id
-        await sio.emit('started_rosgrah', new_msg.dict())
+        processes = get_ros_graph(pod_id, Path(get_pod_folder(app_id, pod_id)))
+        new_msg = start_process(app_id, pod_id, processes)
+        await sio.emit(f'started_{ProcessList.RosGraphProcess.value}', new_msg.dict())
 
-@sio.on('get_node_model')
+@sio.on(ProcessList.NodeParserProcess.value)
 async def get_node_model(msg):
     m = Message(**msg)
     app_id = PodInfo.app_id
     pod_id = PodInfo.pod_id
     if m.app_id == app_id and m.pod_id == pod_id:
         # create node model into files
-        process = get_ros_model(app_id, pod_id)
-        new_msg = Message()
-        new_msg.pid = process.pid
-        new_msg.app_id = app_id
-        new_msg.pod_id = pod_id
-        await sio.emit('started_rosmodel_parser', new_msg.dict())
+        processes = get_ros_model(app_id, pod_id)
+        new_msg = start_process(app_id, pod_id, processes)
+        await sio.emit(f'started_{ProcessList.NodeParserProcess.value}', new_msg.dict())
+
+@sio.on(ProcessList.LifeCycleParserProcess.value)
+async def get_lifecycle_model(msg):
+    m = Message(**msg)
+    app_id = PodInfo.app_id
+    pod_id = PodInfo.pod_id
+    if m.app_id == app_id and m.pod_id == pod_id:
+        # create node model into files
+        processes = get_lifecycle_nodes(app_id, pod_id)
+        new_msg = start_process(app_id, pod_id, processes)
+        await sio.emit(f'started_{ProcessList.LifeCycleParserProcess.value}', new_msg.dict())
 
 @sio.on('pause_graph')
 async def pause_graph(msg):

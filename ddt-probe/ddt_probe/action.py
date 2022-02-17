@@ -3,6 +3,7 @@ from shlex import split
 import os
 from ddt_utils.utils import ProcessList
 from ddt_utils.utils import get_pod_node_folder
+from ddt_utils.utils import get_pod_lifecycle_folder
 
 def start_command(command):
     print("Start command: ", command)
@@ -21,13 +22,20 @@ def start_zenoh(host):
     return pid_zenoh
 
 def get_ros_graph(pod, folder_path):
-    pid_graph_creator = start_command(f"ros2 launch ros2_graph_quest gen_dot.launch.py application_name:=\"{pod}\" result_path:=\"{folder_path}\" sampling_rate:=\"1\"")
-    return pid_graph_creator
+    pid = start_command(f"ros2 launch ros2_graph_quest gen_dot.launch.py application_name:=\"{pod}\" result_path:=\"{folder_path}\" sampling_rate:=\"1\"")
+    yield ProcessList.RosGraphProcess.name, pid
 
 def get_ros_model(app_id, pod_id):
     # pid_ros_model = start_command(f"ros2 launch ros2_graph_quest parse_nodes.launch.py result_path:=\"{app_folder_path}\" sampling_rate:=\"1\"")
-    pid_ros_model = start_command(f'ros2helper nodes -f {get_pod_node_folder(app_id, pod_id)} -r 1')
-    return pid_ros_model
+    pid = start_command(f'ros2helper nodes -f {get_pod_node_folder(app_id, pod_id)} -r 1')
+    yield ProcessList.NodeParserProcess.name, pid
+
+
+def get_lifecycle_nodes(app_id, pod_id):
+    # pid_ros_model = start_command(f"ros2 launch ros2_graph_quest parse_nodes.launch.py result_path:=\"{app_folder_path}\" sampling_rate:=\"1\"")
+    pid = start_command(f'ros2helper lifecycle -f {get_pod_lifecycle_folder(app_id, pod_id)} -r 1')
+    yield ProcessList.LifeCycleParserProcess.name, pid
+
 
 def pause_ros_graph(pids):
     print("pause_ros_graph")

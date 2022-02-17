@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from typing import List
 import logging
-from ros2_model import LifeCycleAction
+from ros2_model import LifeCycleAction, LifeCycleNode
 from ddt_utils.model import Pod
 
 class DebugElement(BaseModel):
@@ -31,6 +31,10 @@ class Application(BaseModel):
         pod = self.find_pod(pod_id)
         for node in nodes:
             pod.add_node(node)
+    def add_lifecycle_nodes(self, pod_id, nodes):
+        pod = self.find_pod(pod_id)
+        for node in nodes:
+            pod.add_lifecycle_node(node)
     def add_debug_ele(self, elemenent):
         self.debug.append(elemenent)
     def find_node(self, node_name, pod_name=None):

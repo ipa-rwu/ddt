@@ -4,6 +4,8 @@ from shutil import rmtree
 from flask import request
 from ddt_utils.utils import get_app_folder
 from ddt_utils.utils import get_pod_folder
+from ddt_utils.utils import TmpFolder
+import datetime
 
 AppNames = list()
 Apps = list()
@@ -11,6 +13,11 @@ Apps = list()
 RoomWeb = list()
 RoomWebName = 'Room-Web'
 WebID = None
+
+def get_log_path():
+    timestampStr = datetime.datetime.now().strftime("%d-%b-%Y-%H-%M")
+    Path(TmpFolder).mkdir(exist_ok=True, parents=True)
+    return  Path(TmpFolder / f'{timestampStr}_log.txt')
 
 def get_pod_rosgraph_path(app_id, pod_id):
     return  Path(get_pod_folder(app_id, pod_id) / f'{pod_id}.svg')

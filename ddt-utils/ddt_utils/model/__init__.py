@@ -50,9 +50,15 @@ class Pod(BaseModel):
     def get_node_names(self):
         for node in self.nodes:
             yield node.nodename.full_name
+    def get_lifecycle_node_names(self):
+        for node in self.nodes:
+            yield node.nodename.full_name
     def add_node(self, node: Node):
         if node.nodename.full_name not in self.get_node_names():
             self.nodes.append(node)
+    def add_lifecycle_node(self, node: LifeCycleNode):
+        if node.nodename.full_name not in self.get_lifecycle_node_names():
+            self.lifecycle_nodes.append(node)
     def add_process(self, name):
         p = Process(name)
         self.processes.append(p)
