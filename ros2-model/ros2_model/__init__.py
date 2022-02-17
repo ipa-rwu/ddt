@@ -2,14 +2,17 @@ from pydantic import BaseModel
 from typing import List
 from enum import Enum, IntEnum
 
+class NodeName(BaseModel):
+    name: str
+    namespace: str
+    full_name : str
+
 class Interface(BaseModel):
     name: str
     types: List[str]
 
 class Node(BaseModel):
-    name: str
-    namespace: str
-    full_name : str
+    nodename:        NodeName
     publishers:      List[Interface]=list()
     subscribers:     List[Interface]=list()
     action_servers:  List[Interface]=list()
@@ -44,9 +47,7 @@ class LifeCycleAction(BaseModel):
 class LifeCycleNode(BaseModel):
     current_state: LifeCyclePrimaryState=LifeCyclePrimaryState.Unknown
     potential_actions: List[LifeCycleAction]=list()
-    name: str
-    namespace: str
-    full_name : str
+    nodename: NodeName
 
     class Config:
         arbitrary_types_allowed = True
