@@ -4,23 +4,36 @@ import logging
 from threading import Lock
 from pprint import pprint
 
-from ddt_orchestration.manager.action import make_ros_graph, update_rosmodels, combine_rosgraphs, show_svg
-from ddt_orchestration.model import Application, DebugElement, Pod, Message, Process
-from ddt_orchestration.utils import *
+from ddt_utils.model import Message
+from ddt_utils.model import Pod
+from ddt_utils.model import Process
+
+from ddt_utils.utils import ProcessList
+
+from ddt_manager.utils import AppNames, RoomWebName, RoomWeb, WebID
+from ddt_manager.utils import name_select_nodes
+from ddt_manager.utils import get_app_rosgraph_path
+from ddt_manager.utils import name_app_obj
+from ddt_manager.utils import name_app_room
+from ddt_manager.utils import get_list
+from ddt_manager.utils import get_rooms
+from ddt_manager.utils import cleanup_folder
+
+from ddt_manager.manager.action import update_ros_graph
+from ddt_manager.manager.action import update_rosmodels
+from ddt_manager.manager.action import combine_rosgraphs
+from ddt_manager.manager.action import show_svg
+from ddt_manager.model import Application, DebugElement
 
 app = Flask(__name__)
-
 app.config['SECRET_KEY'] = 'secret'
 app.config['DEBUG'] = True
-
 socketio = SocketIO(app)
+
 thread = None
 thread_lock = Lock()
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
-
-def update_ros_graph(app, pod):
-    return make_ros_graph(pod, f'app_{app}/{pod}', get_pod_folder(app, pod))
 
 @app.route('/')
 def index():
@@ -215,7 +228,8 @@ def on_join(msg):
         # create an instance of Application
         globals()[name_app_obj(app_id)] = Application(name = app_id)
         globals()[name_select_nodes(app_id)] = list()
-        join_room(name_app_room(app_id), sid = WebID)
+        if WebID:
+            join_room(name_app_room(app_id), sid = WebID)
         RoomWeb.append(app_id)
         app.logger.info(f'Create a new application: {app_id}')
 
@@ -224,6 +238,13 @@ def on_join(msg):
         def get_process():
             for name in ProcessList.list():
                 yield Process(name=name)
+        new_pod = Pod(name = pod_id,
+                    ip = pod_ip,
+                    domain_id = int(domain_id) ,
+                    socket_id = socket_id,
+                    processes = list(get_process()))
+        app.logger.info(f'new pod is: ')
+        pprint(new_pod.dict())
         globals()[name_app_obj(app_id)].add_pod(Pod(name = pod_id,
                                                     ip = pod_ip,
                                                     domain_id = int(domain_id) ,
@@ -304,6 +325,6 @@ def on_leave(msg):
         AppNames.remove(app_id)
     socketio.emit('show_log', msg.dict(), to = RoomWebName)
 
-if __name__=="__main__":
+# if __name__=="__main__":
 
-    socketio.run(app)
+#     socketio.run(app)

@@ -131,4 +131,4 @@ dmypy.json
 
 .vscode/
 
-ddt-orchestration/ddt_orchestration/tmp
+ddt-manager/ddt_manager/tmp
