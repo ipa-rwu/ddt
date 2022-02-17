@@ -1,30 +1,14 @@
 #! /usr/bin/env python3
-from ros2lifecycle.api import get_node_names
-from ros2_graph_quest.lifecycle import call_get_states, call_get_available_transitions
-from ros2_model import LifeCycleNode,LifeCyclePrimaryState, NodeArgs, LifeCycleAction, LifeCycleActionsEnum
 from pathlib import Path
-from shutil import rmtree
-import argparse
 
 from ros2cli.node.direct import DirectNode
 from ros2cli.node.strategy import NodeStrategy
 from ros2lifecycle.api import get_node_names
+from ros2lifecycle.api import get_node_names
 
-
-class RunTimeLifeCycleNode(LifeCycleNode):
-    pass
-
-    def __init__(self, *, node: LifeCycleNode, **data):
-        super().__init__(
-                        name=node.name,
-                        full_name = node.full_name,
-                        namespace = node.namespace,
-                        current_state=node.current_state,
-                        potential_actions = node.potential_actions,
-                        **data)
-
-    class Config:
-        arbitrary_types_allowed = True
+from ros2_helpers.utils import save_to_file
+from ros2_helpers.parse_lifecycle_nodes.lifecycle import call_get_states, call_get_available_transitions
+from ros2_model import LifeCycleNode,LifeCyclePrimaryState, NodeArgs, LifeCycleAction, LifeCycleActionsEnum, NodeName
 
 def get_life_node_names():
     args = NodeArgs(node_name="get_all_lifecycle_nodes")
@@ -78,32 +62,20 @@ def get_potential_action(node_name):
                 yield action
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-f", dest="folder", help= "folder path", default=None)
-    args = parser.parse_args()
-    result_path = args.folder
-    if result_path is None:
-        result_path = Path.home() / 'tmp' / 'lifecycle_parser'
-    rmtree(result_path, ignore_errors=True)
-    try:
-        while True:
-            life_node = get_life_node_names()
-            for l in life_node:
-                *_, state_id = get_state(l.full_name)
-                actions = get_potential_action(l.full_name)
-                parsed_node = RunTimeLifeCycleNode(node = LifeCycleNode(
-                                                    name=l.name,
-                                                    namespace=l.namespace,
-                                                    full_name=l.full_name,
-                                                    current_state = LifeCyclePrimaryState(state_id),
-                                                    potential_actions=list(actions)))
-                f_path = Path(str(result_path) + f'{l.full_name}.json')
-                f_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(f_path, "w+") as f:
-                    f.write(parsed_node.json(indent=4, sort_keys=True))
-    except KeyboardInterrupt:
-        print("quit")
+def parse(nodename: NodeName):
+    *_, state_id = get_state(nodename.full_name)
+    actions = get_potential_action(nodename.full_name)
+    parsed_node = LifeCycleNode(nodename=nodename,
+                                current_state = LifeCyclePrimaryState(state_id),
+                                potential_actions=list(actions))
+    return parsed_node
+
+def main(result_path):
+    life_nodes = get_life_node_names()
+    for l in life_nodes:
+        life_node = NodeName(name=l.name, full_name = l.full_name, namespace=l.namespace)
+        parsed_node = parse(life_node)
+        save_to_file(result_path, l.full_name, parsed_node)
 
 if __name__ == '__main__':
     main()
