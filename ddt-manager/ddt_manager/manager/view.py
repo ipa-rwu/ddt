@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
 from flask_socketio import SocketIO, send, join_room, leave_room, emit, rooms
 import logging
+import logging.handlers
 from threading import Lock
 from pprint import pprint
 
@@ -18,11 +19,14 @@ from ddt_manager.utils import name_app_room
 from ddt_manager.utils import get_list
 from ddt_manager.utils import get_rooms
 from ddt_manager.utils import cleanup_folder
+from ddt_manager.utils import get_log_path
 
 from ddt_manager.manager.action import update_ros_graph
 from ddt_manager.manager.action import update_rosmodels
+from ddt_manager.manager.action import update_lifecycle_models
 from ddt_manager.manager.action import combine_rosgraphs
 from ddt_manager.manager.action import show_svg
+from ddt_manager.manager.action import check_state_emit
 from ddt_manager.model import Application, DebugElement
 
 app = Flask(__name__)
@@ -34,6 +38,19 @@ thread = None
 thread_lock = Lock()
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
+handler = logging.handlers.RotatingFileHandler(
+        get_log_path(),
+        maxBytes=1024 * 1024)
+app.logger.addHandler(handler)
+
+def set_process_state(app_id, pod_id, processes):
+    for process in processes:
+        print(process)
+        p = globals()[name_app_obj(app_id)].find_pod(pod_id).find_process(process['name'])
+        if p:
+            p.start(pid=process['pid'])
+        else:
+            p.stop(pid=process['pid'])
 
 @app.route('/')
 def index():
@@ -62,7 +79,7 @@ def app_page(app_id):
             if proc.state:
                 button_show_graph = False
     except KeyError:
-        app.logger.info(f"Model: {name_app_obj(app_id)} doesn't register yet")
+        app.logger.warn(f"Model: {name_app_obj(app_id)} doesn't register yet")
     return render_template('app.html', app_id=app_id,
                                         ros_graph = res,
                                         debug_list = debug_list,
@@ -75,31 +92,28 @@ def show_graph(app_id):
 
     for pod in app_model.pods:
         pod_id = pod.name
-        pod_ros_graph_process = pod.find_process(ProcessList.RosGraphProcess.name)
         msg = Message()
         msg.app_id = app_id
         msg.pod_id = pod_id
-        if not pod_ros_graph_process.state:
-            # if app_graph_path.is_file():
-            #     return jsonify(result=show_svg(app_graph_path))
-            app.logger.info(f'Trigger pod [{pod_id} start "ROS Graph maker"]')
-            socketio.emit('show_graph', msg.dict(), to = pod.socket_id)
-        pod_rosmodel_process = pod.find_process(ProcessList.NodeParserProcess.name)
-        if not pod_rosmodel_process.state:
-            # if app_graph_path.is_file():
-            #     return jsonify(result=show_svg(app_graph_path))
-            app.logger.info(f'Trigger pod [{pod_id} start "ROS Node Parser"]')
-            socketio.emit('get_node_model', msg.dict(), to = pod.socket_id)
-        update_ros_graph(app_id, pod_id)
+
+        check_state_emit(pod, ProcessList.RosGraphProcess, msg.dict(), socketio, pod.socket_id)
+
+        check_state_emit(pod, ProcessList.NodeParserProcess, msg.dict(), socketio, pod.socket_id)
+
+        check_state_emit(pod, ProcessList.LifeCycleParserProcess, msg.dict(), socketio, pod.socket_id)
+
+        update_ros_graph(app_id, pod_id, app.logger)
+
         app_model.find_pod(pod_id).nodes = list()
-        app_model.add_nodes(pod_id, update_rosmodels(app_id, pod_id))
-    app.logger.info(f'Application {app_id} status: ')
-    pprint(globals()[name_app_obj(app_id)].dict())
+        app_model.add_nodes(pod_id, update_rosmodels(app_id, pod_id, app.logger))
+        app_model.add_lifecycle_nodes(pod_id, update_lifecycle_models(app_id, pod_id, app.logger))
+    # app.logger.info(f'show_graph: Application {app_id} status: ')
+    # app.logger.info(globals()[name_app_obj(app_id)].dict())
     res = combine_rosgraphs(app_obj=app_model)
     return jsonify(result=res)
 
 def stop_process(app_id):
-    for target in [ProcessList.RosGraphProcess.name, ProcessList.RosGraphProcess.name, ProcessList.NodeParserProcess.name]:
+    for target in [ProcessList.RosGraphProcess.name, ProcessList.LifeCycleParserProcess.name, ProcessList.NodeParserProcess.name]:
         for pod, process in globals()[name_app_obj(app_id)].find_processes(target):
             msg = Message()
             setattr(msg, pod.name, process.pid)
@@ -107,6 +121,13 @@ def stop_process(app_id):
             if process.state:
                 socketio.emit('pause_graph', msg.dict(), to = name_app_room(app_id))
                 process.stop()
+
+    app_model = globals()[name_app_obj(app_id)]
+    for pod in app_model.pods:
+        pod_id = pod.name
+        app_model.find_pod(pod_id).nodes = list()
+        app_model.add_nodes(pod_id, update_rosmodels(app_id, pod_id, app.logger))
+        app_model.add_lifecycle_nodes(pod_id, update_lifecycle_models(app_id, pod_id, app.logger))
 
 @app.route('/app_<string:app_id>/pause_graph')
 def pause_graph(app_id):
@@ -172,6 +193,8 @@ def handle_debug(app_id):
         for l in get_list(('debug_pod', 'debug_node')):
             ele = DebugElement(node=l['debug_node'], pod=l['debug_pod'])
             globals()[name_app_obj(app_id)].debug.append(ele)
+        app.logger.info(f'Request debugging in Application {app_id}: ')
+        app.logger.info(globals()[name_app_obj(app_id)].debug)
     return redirect(url_for('app_page', app_id=app_id))
 
 def monitor_applist_thread():
@@ -244,7 +267,7 @@ def on_join(msg):
                     socket_id = socket_id,
                     processes = list(get_process()))
         app.logger.info(f'new pod is: ')
-        pprint(new_pod.dict())
+        app.logger.info(new_pod.dict())
         globals()[name_app_obj(app_id)].add_pod(Pod(name = pod_id,
                                                     ip = pod_ip,
                                                     domain_id = int(domain_id) ,
@@ -263,33 +286,27 @@ def on_join(msg):
         session['receive_count'] = session.get('receive_count', 0) + 1
         socketio.emit('show_log', msg.dict(), to = RoomWebName)
 
-@socketio.on('started_rosgrah')
+# muti processes
+@socketio.on(f'started_{ProcessList.LifeCycleParserProcess.value}')
 def started_rosgrah(msg):
     m = Message(**msg)
     app_id = m.app_id
     pod_id = m.pod_id
-    for process in m.processes:
-        print(process)
-        p = globals()[name_app_obj(app_id)].find_pod(pod_id).find_process(process['name'])
-        if p:
-            p.start(pid=process['pid'])
-            app.logger.info(f"Application {app_id}: {pod_id} started [{p.name} ({process['pid']})]")
-        else:
-            app.logger.error(f"Application {app_id}: {pod_id} didn't have process [{p.name}]")
+    set_process_state(app_id, pod_id, m.processes)
 
-@socketio.on('started_rosmodel_parser')
+@socketio.on(f'started_{ProcessList.RosGraphProcess.value}')
+def started_rosgrah(msg):
+    m = Message(**msg)
+    app_id = m.app_id
+    pod_id = m.pod_id
+    set_process_state(app_id, pod_id, m.processes)
+
+@socketio.on(f'started_{ProcessList.NodeParserProcess.value}')
 def started_rosmodel_parser(msg):
     m = Message(**msg)
     app_id = m.app_id
     pod_id = m.pod_id
-    process_name = ProcessList.NodeParserProcess.name
-    pid = m.pid
-    p = globals()[name_app_obj(app_id)].find_pod(pod_id).find_process(process_name)
-    if p:
-        p.start(pid=pid)
-        app.logger.info(f"Application {app_id}: {pod_id} started [{process_name}] ({pid})]")
-    else:
-        app.logger.error(f"Application {app_id}: {pod_id} didn't have process [{process_name}]")
+    set_process_state(app_id, pod_id, m.processes)
 
 # @socketio.event
 # def my_ping():

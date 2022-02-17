@@ -10,10 +10,11 @@ class _ExtendedEnum(Enum):
         return list(map(lambda c: c.name, cls))
 
 class ProcessList(_ExtendedEnum):
-    RosGraphProcess = 0
-    DebugBridgeProcess = 1
-    GraphBridgeProcess = 2
-    NodeParserProcess = 3
+    RosGraphProcess =  'show_graph'
+    DebugBridgeProcess = "set_debug_bridge"
+    GraphBridgeProcess = 'set_graph_bridge'
+    NodeParserProcess = 'get_node_models'
+    LifeCycleParserProcess = 'get_lifecycle_node_models'
 
 def get_app_folder(app_id):
     f = Path(TmpFolder / app_id)
@@ -27,5 +28,10 @@ def get_pod_folder(app_id, pod_id):
 
 def get_pod_node_folder(app_id, pod_id):
     f = Path(get_pod_folder(app_id, pod_id) / 'nodes')
+    f.mkdir(parents=True, exist_ok=True)
+    return  f
+
+def get_pod_lifecycle_folder(app_id, pod_id):
+    f = Path(get_pod_folder(app_id, pod_id) / 'lifecycle_nodes')
     f.mkdir(parents=True, exist_ok=True)
     return  f
