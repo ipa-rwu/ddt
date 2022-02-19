@@ -33,6 +33,13 @@ ament_target_dependencies(lifecycle_listener
   "rclcpp_lifecycle"
   "std_msgs"
 )
+add_executable(lifecycle_forwarder
+  src/lifecycle_forwarder.cpp)
+ament_target_dependencies(lifecycle_forwarder
+  "lifecycle_msgs"
+  "rclcpp_lifecycle"
+  "std_msgs"
+)
 add_executable(lifecycle_service_client
   src/lifecycle_service_client.cpp)
 ament_target_dependencies(lifecycle_service_client
@@ -44,6 +51,7 @@ ament_target_dependencies(lifecycle_service_client
 install(TARGETS
   lifecycle_talker
   lifecycle_listener
+  lifecycle_forwarder
   lifecycle_service_client
   DESTINATION lib/${PROJECT_NAME})
 
