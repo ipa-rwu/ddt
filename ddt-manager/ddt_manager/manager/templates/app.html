@@ -78,7 +78,8 @@
 {% for node_id, pod_id in debug_list %}
 {% set nodeID =  node_id[1] %}
 {% set podID =  pod_id[1] %}
-<form id="delete" method=post action="{{ url_for('delete_debug_node', app_id=app_id, node_id = nodeID, pod_id = podID) }}">
+{% set nodeID_web =  nodeID.replace('/', '$') %}
+<form id="delete" method=post action="{{ url_for('delete_debug_node', app_id=app_id, node_id = nodeID_web, pod_id = podID) }}">
     <td name="id_{{ nodeID }}" style="display: inline;" >{{ nodeID }}</td>
     <button type=submit style="display: inline;" >Delete</button>
 </form>
