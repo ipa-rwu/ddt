@@ -5,13 +5,32 @@ import logging
 from pathlib import Path
 
 from ddt_utils.model import Message
+from ddt_utils.model import Pod
+from ddt_utils.model import Process
+
 from ddt_utils.utils import get_pod_folder
 from ddt_utils.utils import ProcessList
+from ddt_utils.utils import SocketActionList
+from ddt_utils.utils import update_lifecycle_models
+from ddt_utils.utils import update_rosmodels
+from ddt_utils.utils import ShowRosGraphProcesses
+
+from ddt_utils.actions import set_process_state
+
+from ros2_model import LifeCycleActionsEnum
 
 from ddt_probe.action import get_ros_model
 from ddt_probe.action import stop_command
 from ddt_probe.action import get_ros_graph
 from ddt_probe.action import get_lifecycle_nodes
+from ddt_probe.action import update_nodes
+from ddt_probe.action import update_lifecycle_nodes
+from ddt_probe.action import start_zenoh_process
+from ddt_probe.action import decide_bridge_collect_debug_topics
+
+from ddt_probe.action import kill_node
+
+from ros2_helpers.set_lifecycle_state import set_lifecycle_state
 
 sio = socketio.AsyncClient(handle_sigint=False)
 
@@ -20,23 +39,32 @@ async def connect():
     logging.info(f'connected to server')
     await register()
 
-def start_process(app_id, pod_id, processes):
+def msg_start_process(app_id, pod_id, ps):
     new_msg = Message()
-    ps = [dict(zip(("name", "pid"), (name, proc.pid))) for name, proc in processes]
     logging.info(f'{pod_id} from {app_id} start processes: {ps}')
     new_msg.processes = ps
     new_msg.app_id = app_id
     new_msg.pod_id = pod_id
     return new_msg
 
+def update_process_in_model(pod: Pod, ps):
+    if ps['name'] not in [ process.name for process in pod.processes]:
+        pod.processes.append(Process(name = ps['name'], pid = ps['pid']))
+    logging.info(f'Current processes in Pod [{pod.name}] are {pod.processes}')
+
 @sio.on(ProcessList.RosGraphProcess.value)
 async def show_graph(msg):
     m = Message(**msg)
     app_id = PodInfo.app_id
     pod_id = PodInfo.pod_id
+    logging.info(f'{ProcessList.RosGraphProcess.value}: get message ({m})')
     if m.app_id == app_id and m.pod_id == pod_id:
         processes = get_ros_graph(pod_id, Path(get_pod_folder(app_id, pod_id)))
-        new_msg = start_process(app_id, pod_id, processes)
+        pss = [dict(zip(("name", "pid"), (name, proc.pid))) for name, proc in processes]
+        for ps in pss:
+            update_process_in_model(PodModel, ps)
+            set_process_state(PodModel, name=ps['name'], pid=ps['pid'], logger=logging, start=True)
+        new_msg = msg_start_process(app_id, pod_id, pss)
         await sio.emit(f'started_{ProcessList.RosGraphProcess.value}', new_msg.dict())
 
 @sio.on(ProcessList.NodeParserProcess.value)
@@ -47,7 +75,11 @@ async def get_node_model(msg):
     if m.app_id == app_id and m.pod_id == pod_id:
         # create node model into files
         processes = get_ros_model(app_id, pod_id)
-        new_msg = start_process(app_id, pod_id, processes)
+        pss = [dict(zip(("name", "pid"), (name, proc.pid))) for name, proc in processes]
+        for ps in pss:
+            update_process_in_model(PodModel, ps)
+            set_process_state(PodModel, name=ps['name'], pid=ps['pid'], logger=logging, start=True)
+        new_msg = msg_start_process(app_id, pod_id, pss)
         await sio.emit(f'started_{ProcessList.NodeParserProcess.value}', new_msg.dict())
 
 @sio.on(ProcessList.LifeCycleParserProcess.value)
@@ -58,14 +90,78 @@ async def get_lifecycle_model(msg):
     if m.app_id == app_id and m.pod_id == pod_id:
         # create node model into files
         processes = get_lifecycle_nodes(app_id, pod_id)
-        new_msg = start_process(app_id, pod_id, processes)
+        pss = [dict(zip(("name", "pid"), (name, proc.pid))) for name, proc in processes]
+        for ps in pss:
+            update_process_in_model(PodModel, ps)
+            set_process_state(PodModel, name=ps['name'], pid=ps['pid'], logger=logging, start=True)
+        new_msg = msg_start_process(app_id, pod_id, pss)
         await sio.emit(f'started_{ProcessList.LifeCycleParserProcess.value}', new_msg.dict())
 
-@sio.on('pause_graph')
+@sio.on(SocketActionList.Debug.value)
+async def start_debug(msg):
+    m = Message(**msg)
+    app_id = PodInfo.app_id
+    pod_id = PodInfo.pod_id
+    debug_list = m.nodes
+    # update PodModel
+    for node_model in update_rosmodels(app_id, pod_id, logging):
+        PodModel.add_node(node_model)
+    for node_model in update_lifecycle_models(app_id, pod_id, logging):
+        PodModel.add_lifecycle_node(node_model)
+
+    if m.app_id == app_id and m.pod_id == pod_id:
+        bridge_mode, allow_topics, dst_names= decide_bridge_collect_debug_topics(debug_list, PodModel)
+        logging.info(f'Start debug procedure! Bridge type: [{bridge_mode}], Allow topics: {allow_topics}, Peers: {dst_names}]')
+        dsts = [ f'{name}:{PodInfo.dst_port}' for name in dst_names]
+        # start bridge
+        processes = start_zenoh_process(bridge_mode, debug=PodInfo.debug,
+                                        domain_id=PodInfo.domain_id,
+                                        allow_topics=allow_topics,
+                                        dsts = dsts,
+                                        listen_server=PodInfo.listen_server,
+                                        listen_port=PodInfo.listen_port)
+        pss = [dict(zip(("name", "pid"), (name, proc.pid))) for name, proc in processes]
+        for ps in pss:
+            update_process_in_model(PodModel, ps)
+            set_process_state(PodModel, name=ps['name'], pid=ps['pid'], logger=logging, start=True)
+        new_msg = msg_start_process(app_id, pod_id, pss)
+        await sio.emit(f'started_{ProcessList.DebugBridgeProcess.value}', new_msg.dict())
+        # get all topics of this node -- add to allowded topic
+
+        # find realted nodes per topic in same pod
+            # if publisher, need to start a bridge with dst (pod service)
+            # if subscriber, need to lisen on
+        # debug nodw samw
+    for name in debug_list:
+        if name in PodModel.node_list:
+            if name in PodModel.lifecycle_node_list:
+                life_model = PodModel.find_lifecycle_node(name)
+                res = set_lifecycle_state(name, LifeCycleActionsEnum.Deactivate.value)
+                if res:
+                    logging.info(f'Deactivate Lifecycle Node[{name}] successfully')
+                else:
+                    logging.error(f'Could Not deactivate Lifecycle Node[{name}]')
+            else:
+                try:
+                    # kill node
+                    kill_node(name)
+                except:
+                    NotImplemented
+
+@sio.on(ProcessList.DebugBridgeProcess.value)
+async def start_debug_pod_bridge(msg):
+    NotImplemented
+
+@sio.on(SocketActionList.PauseGraph.value)
 async def pause_graph(msg):
-    for pid in msg.values():
-        logging.info(f'Stopping pid: {pid}')
-        stop_command(pid)
+    m = Message(**msg)
+    pod_name = m.pod
+    for ps in PodModel.processes:
+        stop_command(ps.pid)
+        set_process_state(PodModel, name=ps.name, logger=logging, stop=True)
+    update_nodes(PodInfo.app_id, PodInfo.pod_id, PodModel)
+    update_lifecycle_nodes(PodInfo.app_id, PodInfo.pod_id, PodModel)
+    PodModel.update()
 
 @sio.event
 async def disconnect():
@@ -79,6 +175,12 @@ async def register():
     msg.pod_id = PodInfo.pod_id
     msg.pod_ip = PodInfo.pod_ip
     msg.domain_id = PodInfo.domain_id
+    global PodModel
+    PodModel = Pod(name = PodInfo.pod_id,
+                    ip = PodInfo.pod_ip,
+                    domain_id = PodInfo.domain_id,
+                    socket_id=sio.sid,
+                    process=list())
     await sio.emit('register', msg.dict())
 
 @sio.event
@@ -88,6 +190,11 @@ async def cleanup():
     msg.pod_id = PodInfo.pod_id
     msg.pod_ip = PodInfo.pod_ip
     msg.domain_id = PodInfo.domain_id
+    for ps in ShowRosGraphProcesses:
+        set_process_state(PodModel, name=ps, logger=logging, stop=True)
+        pid = PodModel.find_process(ps).pid
+        stop_command(pid)
+    stop_command(pid)
     await sio.emit('leave', msg.dict())
     await sio.disconnect()
 

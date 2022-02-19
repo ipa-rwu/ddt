@@ -4,12 +4,19 @@ import logging
 import logging.handlers
 from threading import Lock
 from pprint import pprint
+import re
 
 from ddt_utils.model import Message
 from ddt_utils.model import Pod
 from ddt_utils.model import Process
 
 from ddt_utils.utils import ProcessList
+from ddt_utils.utils import SocketActionList
+from ddt_utils.utils import update_lifecycle_models
+from ddt_utils.utils import update_rosmodels
+from ddt_utils.utils import DebugPodPrefix
+from ddt_utils.utils import ShowRosGraphProcesses
+
 
 from ddt_manager.utils import AppNames, RoomWebName, RoomWeb, WebID
 from ddt_manager.utils import name_select_nodes
@@ -22,11 +29,11 @@ from ddt_manager.utils import cleanup_folder
 from ddt_manager.utils import get_log_path
 
 from ddt_manager.manager.action import update_ros_graph
-from ddt_manager.manager.action import update_rosmodels
-from ddt_manager.manager.action import update_lifecycle_models
 from ddt_manager.manager.action import combine_rosgraphs
 from ddt_manager.manager.action import show_svg
 from ddt_manager.manager.action import check_state_emit
+from ddt_manager.manager.action import set_processes_group
+
 from ddt_manager.model import Application, DebugElement
 
 app = Flask(__name__)
@@ -42,15 +49,6 @@ handler = logging.handlers.RotatingFileHandler(
         get_log_path(),
         maxBytes=1024 * 1024)
 app.logger.addHandler(handler)
-
-def set_process_state(app_id, pod_id, processes):
-    for process in processes:
-        print(process)
-        p = globals()[name_app_obj(app_id)].find_pod(pod_id).find_process(process['name'])
-        if p:
-            p.start(pid=process['pid'])
-        else:
-            p.stop(pid=process['pid'])
 
 @app.route('/')
 def index():
@@ -113,17 +111,13 @@ def show_graph(app_id):
     return jsonify(result=res)
 
 def stop_process(app_id):
-    for target in [ProcessList.RosGraphProcess.name, ProcessList.LifeCycleParserProcess.name, ProcessList.NodeParserProcess.name]:
-        for pod, process in globals()[name_app_obj(app_id)].find_processes(target):
-            msg = Message()
-            setattr(msg, pod.name, process.pid)
-            # app.logger.info(f"Stop process in {app_id}: {process.name} from {pod.name}")
-            if process.state:
-                socketio.emit('pause_graph', msg.dict(), to = name_app_room(app_id))
-                process.stop()
-
     app_model = globals()[name_app_obj(app_id)]
     for pod in app_model.pods:
+        msg = Message()
+        msg.pod = pod.name
+        socketio.emit(SocketActionList.PauseGraph.value, msg.dict(), to = pod.socket_id) #to = name_app_room(app_id)
+        processes = [{"name" : p, "pid" : None} for p in ShowRosGraphProcesses]
+        set_processes_group(pod, processes, app.logger, stop=True)
         pod_id = pod.name
         app_model.find_pod(pod_id).nodes = list()
         app_model.add_nodes(pod_id, update_rosmodels(app_id, pod_id, app.logger))
@@ -146,7 +140,7 @@ def add_topic(app_id, pod_id, topic_id):
 """
 ignore rosgraph node
 """
-@app.route('/app_<string:app_id>/<pod_id>/__rosgraph_creator/add', methods=['GET', 'POST'])
+@app.route('/app_<string:app_id>/<pod_id>/__$rosgraph_creator/add', methods=['GET', 'POST'])
 def ignore_node(app_id, pod_id):
     stop_process(app_id)
     return redirect(url_for('app_page', app_id=app_id))
@@ -157,6 +151,7 @@ add debug node
 @app.route('/app_<string:app_id>/<pod_id>/__<node_id>/add', methods=['GET', 'POST'])
 def add_node(app_id, pod_id, node_id):
     stop_process(app_id)
+    node_id = node_id.replace('$', '/')
     app.logger.info(f'Select debugging node [{node_id}] from pod [{pod_id}]')
     debug_instance = DebugElement(pod=pod_id, node=node_id)
     # return jsonify(result=debug_instance.json())
@@ -173,6 +168,7 @@ delete node
 """
 @app.route('/app_<string:app_id>/<pod_id>/__<node_id>/delete', methods=['GET', 'POST'])
 def delete_debug_node(app_id, pod_id, node_id):
+    node_id = node_id.replace('$', '/')
     app.logger.info(f'Deleting debugging node [{node_id}] from pod [{pod_id}]')
     delete_debug_instance = DebugElement(pod=pod_id, node=node_id)
     # return jsonify(result=debug_instance.json())
@@ -189,10 +185,25 @@ handle debug list
 """
 @app.route('/app_<string:app_id>/debug', methods=['GET','POST'])
 def handle_debug(app_id):
+    app_model = globals()[name_app_obj(app_id)]
     if request.method == 'POST':
+        pod_nodes = dict()
         for l in get_list(('debug_pod', 'debug_node')):
-            ele = DebugElement(node=l['debug_node'], pod=l['debug_pod'])
-            globals()[name_app_obj(app_id)].debug.append(ele)
+            debug_node_name = l['debug_node']
+            debug_pod_name = l['debug_pod']
+            if not debug_pod_name in pod_nodes.keys():
+                pod_nodes[debug_pod_name] = list()
+            if not debug_node_name in pod_nodes[debug_pod_name]:
+                pod_nodes[debug_pod_name].append(debug_node_name)
+            ele = DebugElement(node=debug_node_name, pod=debug_pod_name)
+            app_model.debug.append(ele)
+        for pod_id in pod_nodes.keys():
+            pod_model = app_model.find_pod(pod_id)
+            msg = Message()
+            msg.nodes = pod_nodes[pod_id]
+            msg.app_id = app_id
+            msg.pod_id = pod_id
+            socketio.emit(SocketActionList.Debug.value, msg.dict(), to = pod_model.socket_id)
         app.logger.info(f'Request debugging in Application {app_id}: ')
         app.logger.info(globals()[name_app_obj(app_id)].debug)
     return redirect(url_for('app_page', app_id=app_id))
@@ -286,27 +297,42 @@ def on_join(msg):
         session['receive_count'] = session.get('receive_count', 0) + 1
         socketio.emit('show_log', msg.dict(), to = RoomWebName)
 
+    if re.match(DebugPodPrefix, pod_id):
+        socketio.emit(ProcessList.DebugBridgeProcess.value, msg.dict(), to = socket_id)
+
 # muti processes
 @socketio.on(f'started_{ProcessList.LifeCycleParserProcess.value}')
 def started_rosgrah(msg):
     m = Message(**msg)
     app_id = m.app_id
     pod_id = m.pod_id
-    set_process_state(app_id, pod_id, m.processes)
+    p = globals()[name_app_obj(app_id)].find_pod(pod_id)
+    set_processes_group(p, m.processes, app.logger, start=True)
 
 @socketio.on(f'started_{ProcessList.RosGraphProcess.value}')
 def started_rosgrah(msg):
     m = Message(**msg)
     app_id = m.app_id
     pod_id = m.pod_id
-    set_process_state(app_id, pod_id, m.processes)
+    p = globals()[name_app_obj(app_id)].find_pod(pod_id)
+    set_processes_group(p, m.processes, app.logger, start=True)
 
 @socketio.on(f'started_{ProcessList.NodeParserProcess.value}')
 def started_rosmodel_parser(msg):
     m = Message(**msg)
     app_id = m.app_id
     pod_id = m.pod_id
-    set_process_state(app_id, pod_id, m.processes)
+    p = globals()[name_app_obj(app_id)].find_pod(pod_id)
+    set_processes_group(p, m.processes, app.logger, start=True)
+
+@socketio.on(f'started_{ProcessList.DebugBridgeProcess.value}')
+def started_ori_bridge(msg):
+    m = Message(**msg)
+    app_id = m.app_id
+    pod_id = m.pod_id
+    p = globals()[name_app_obj(app_id)].find_pod(pod_id)
+    set_processes_group(p, m.processes, app.logger, start=True)
+    # deploy debug pod
 
 # @socketio.event
 # def my_ping():
