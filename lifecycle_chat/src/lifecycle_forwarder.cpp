@@ -8,6 +8,8 @@
 #include "lifecycle_msgs/msg/transition.hpp"
 #include "lifecycle_msgs/msg/transition_event.hpp"
 
+#include "bondcpp/bond.hpp"
+#include "bond/msg/constants.hpp"
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/publisher.hpp"
@@ -29,10 +31,11 @@ public:
    * The lifecycletalker/lifecyclenode constructor has the same
    * arguments a regular node.
    */
-  explicit LifecycleForwarder(const std::string & node_name, bool intra_process_comms = false)
-  : rclcpp_lifecycle::LifecycleNode(node_name,
-      rclcpp::NodeOptions().use_intra_process_comms(intra_process_comms))
-  {}
+  explicit LifecycleForwarder(const std::string &node_name, bool intra_process_comms = false)
+      : rclcpp_lifecycle::LifecycleNode(node_name,
+                                        rclcpp::NodeOptions().use_intra_process_comms(intra_process_comms))
+  {
+  }
 
   void
   publish()
@@ -42,12 +45,15 @@ public:
     msg->data = this->get_name() + std::string(": ") + std::to_string(++count);
 
     // Print the current state for demo purposes
-    if (!pub_->is_activated()) {
+    if (!pub_->is_activated())
+    {
       RCLCPP_INFO(
-        get_logger(), "Lifecycle publisher is currently inactive. Messages are not published.");
-    } else {
+          get_logger(), "Lifecycle publisher is currently inactive. Messages are not published.");
+    }
+    else
+    {
       RCLCPP_INFO(
-        get_logger(), "Lifecycle publisher is active. Publishing: [%s]", msg->data.c_str());
+          get_logger(), "Lifecycle publisher is active. Publishing: [%s]", msg->data.c_str());
     }
 
     // We independently from the current state call publish on the lifecycle
@@ -80,7 +86,7 @@ public:
     // As of the beta version, there is only a lifecycle publisher
     // available.
     pub_ = this->create_publisher<std_msgs::msg::String>("lifecycle_forward", 10);
-    
+
     RCLCPP_INFO(get_logger(), "on_configure() is called.");
 
     // We return a success and hence invoke the transition to the next
@@ -90,6 +96,30 @@ public:
     // In case of TRANSITION_CALLBACK_ERROR or any thrown exception within
     // this callback, the state machine transitions to state "errorprocessing".
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+  }
+
+  void create_bond()
+  {
+    RCLCPP_INFO(get_logger(), "Creating bond (%s) to lifecycle manager.", this->get_name());
+
+    bond_ = std::make_unique<bond::Bond>(
+        std::string("bond"),
+        this->get_name(),
+        shared_from_this());
+
+    bond_->setHeartbeatPeriod(0.10);
+    bond_->setHeartbeatTimeout(4.0);
+    bond_->start();
+  }
+
+  void destroy_bond()
+  {
+    RCLCPP_INFO(get_logger(), "Destroying bond (%s) to lifecycle manager.", this->get_name());
+
+    if (bond_)
+    {
+      bond_.reset();
+    }
   }
 
   /// Transition callback for state activating
@@ -112,11 +142,12 @@ public:
     pub_->on_activate();
 
     // Data topic from the lc_talker node
+
     sub_data_ = this->create_subscription<std_msgs::msg::String>(
-      "lifecycle_chatter", 10,
-      std::bind(&LifecycleForwarder::data_callback, this, std::placeholders::_1));
+        "lifecycle_chatter", 10,
+        std::bind(&LifecycleForwarder::data_callback, this, std::placeholders::_1));
 
-
+    create_bond();
     RCUTILS_LOG_INFO_NAMED(get_name(), "on_activate() is called.");
 
     // Let's sleep for 2 seconds.
@@ -133,7 +164,7 @@ public:
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
   }
 
-    void data_callback(const std_msgs::msg::String::SharedPtr msg)
+  void data_callback(const std_msgs::msg::String::SharedPtr msg)
   {
     RCLCPP_INFO(get_logger(), "data_callback: %s", msg->data.c_str());
     this->publish();
@@ -159,6 +190,9 @@ public:
     pub_->on_deactivate();
 
     RCUTILS_LOG_INFO_NAMED(get_name(), "on_deactivate() is called.");
+
+    // destroy bond connection
+    destroy_bond();
 
     // We return a success and hence invoke the transition to the next
     // step: "inactive".
@@ -211,7 +245,7 @@ public:
    * TRANSITION_CALLBACK_ERROR or any uncaught exceptions to "errorprocessing"
    */
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-  on_shutdown(const rclcpp_lifecycle::State & state)
+  on_shutdown(const rclcpp_lifecycle::State &state)
   {
     // In our shutdown phase, we release the shared pointers to the
     // timer and publisher. These entities are no longer available
@@ -219,9 +253,9 @@ public:
     pub_.reset();
 
     RCUTILS_LOG_INFO_NAMED(
-      get_name(),
-      "on shutdown is called from state %s.",
-      state.label().c_str());
+        get_name(),
+        "on shutdown is called from state %s.",
+        state.label().c_str());
 
     // We return a success and hence invoke the transition to the next
     // step: "finalized".
@@ -241,10 +275,8 @@ private:
   std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::String>> pub_;
   std::shared_ptr<rclcpp::Subscription<std_msgs::msg::String>> sub_data_;
   std::shared_ptr<rclcpp::Subscription<lifecycle_msgs::msg::TransitionEvent>>
-  sub_notification_;
-
-
- 
+      sub_notification_;
+  std::unique_ptr<bond::Bond> bond_{nullptr};
 };
 
 /**
@@ -252,7 +284,7 @@ private:
  * as a regular node. This means we can spawn a
  * node, give it a name and add it to the executor.
  */
-int main(int argc, char * argv[])
+int main(int argc, char *argv[])
 {
   // force flush of the stdout buffer.
   // this ensures a correct sync of all prints
@@ -264,7 +296,7 @@ int main(int argc, char * argv[])
   rclcpp::executors::SingleThreadedExecutor exe;
 
   std::shared_ptr<LifecycleForwarder> lc_node =
-    std::make_shared<LifecycleForwarder>("lc_forwarder");
+      std::make_shared<LifecycleForwarder>("lc_forwarder");
 
   exe.add_node(lc_node->get_node_base_interface());
 

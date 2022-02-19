@@ -10,6 +10,9 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/publisher.hpp"
 
+#include "bondcpp/bond.hpp"
+#include "bond/msg/constants.hpp"
+
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "rclcpp_lifecycle/lifecycle_publisher.hpp"
 
@@ -27,10 +30,11 @@ public:
    * The lifecycletalker/lifecyclenode constructor has the same
    * arguments a regular node.
    */
-  explicit LifecycleTalker(const std::string & node_name, bool intra_process_comms = false)
-  : rclcpp_lifecycle::LifecycleNode(node_name,
-      rclcpp::NodeOptions().use_intra_process_comms(intra_process_comms))
-  {}
+  explicit LifecycleTalker(const std::string &node_name, bool intra_process_comms = false)
+      : rclcpp_lifecycle::LifecycleNode(node_name,
+                                        rclcpp::NodeOptions().use_intra_process_comms(intra_process_comms))
+  {
+  }
 
   void
   publish()
@@ -40,12 +44,15 @@ public:
     msg->data = this->get_name() + std::string(": ") + std::to_string(++count);
 
     // Print the current state for demo purposes
-    if (!pub_->is_activated()) {
+    if (!pub_->is_activated())
+    {
       RCLCPP_INFO(
-        get_logger(), "Lifecycle publisher is currently inactive. Messages are not published.");
-    } else {
+          get_logger(), "Lifecycle publisher is currently inactive. Messages are not published.");
+    }
+    else
+    {
       RCLCPP_INFO(
-        get_logger(), "Lifecycle publisher is active. Publishing: [%s]", msg->data.c_str());
+          get_logger(), "Lifecycle publisher is active. Publishing: [%s]", msg->data.c_str());
     }
 
     // We independently from the current state call publish on the lifecycle
@@ -53,6 +60,30 @@ public:
     // Only if the publisher is in an active state, the message transfer is
     // enabled and the message actually published.
     pub_->publish(std::move(msg));
+  }
+
+  void create_bond()
+  {
+    RCLCPP_INFO(get_logger(), "Creating bond (%s) to lifecycle manager.", this->get_name());
+
+    bond_ = std::make_unique<bond::Bond>(
+        std::string("bond"),
+        this->get_name(),
+        shared_from_this());
+
+    bond_->setHeartbeatPeriod(0.10);
+    bond_->setHeartbeatTimeout(4.0);
+    bond_->start();
+  }
+
+  void destroy_bond()
+  {
+    RCLCPP_INFO(get_logger(), "Destroying bond (%s) to lifecycle manager.", this->get_name());
+
+    if (bond_)
+    {
+      bond_.reset();
+    }
   }
 
   /// Transition callback for state configuring
@@ -79,7 +110,7 @@ public:
     // available.
     pub_ = this->create_publisher<std_msgs::msg::String>("lifecycle_chatter", 10);
     timer_ = this->create_wall_timer(
-      1s, std::bind(&LifecycleTalker::publish, this));
+        1s, std::bind(&LifecycleTalker::publish, this));
 
     RCLCPP_INFO(get_logger(), "on_configure() is called.");
 
@@ -113,11 +144,7 @@ public:
 
     RCUTILS_LOG_INFO_NAMED(get_name(), "on_activate() is called.");
 
-    // Let's sleep for 2 seconds.
-    // We emulate we are doing important
-    // work in the activating phase.
-    std::this_thread::sleep_for(2s);
-
+    create_bond();
     // We return a success and hence invoke the transition to the next
     // step: "active".
     // If we returned TRANSITION_CALLBACK_FAILURE instead, the state machine
@@ -147,6 +174,7 @@ public:
     pub_->on_deactivate();
 
     RCUTILS_LOG_INFO_NAMED(get_name(), "on_deactivate() is called.");
+    destroy_bond();
 
     // We return a success and hence invoke the transition to the next
     // step: "inactive".
@@ -200,7 +228,7 @@ public:
    * TRANSITION_CALLBACK_ERROR or any uncaught exceptions to "errorprocessing"
    */
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-  on_shutdown(const rclcpp_lifecycle::State & state)
+  on_shutdown(const rclcpp_lifecycle::State &state)
   {
     // In our shutdown phase, we release the shared pointers to the
     // timer and publisher. These entities are no longer available
@@ -209,9 +237,9 @@ public:
     pub_.reset();
 
     RCUTILS_LOG_INFO_NAMED(
-      get_name(),
-      "on shutdown is called from state %s.",
-      state.label().c_str());
+        get_name(),
+        "on shutdown is called from state %s.",
+        state.label().c_str());
 
     // We return a success and hence invoke the transition to the next
     // step: "finalized".
@@ -235,6 +263,7 @@ private:
   // lifecycle timer will be created which obeys the same lifecycle management as the
   // lifecycle publisher.
   std::shared_ptr<rclcpp::TimerBase> timer_;
+  std::unique_ptr<bond::Bond> bond_{nullptr};
 };
 
 /**
@@ -242,7 +271,7 @@ private:
  * as a regular node. This means we can spawn a
  * node, give it a name and add it to the executor.
  */
-int main(int argc, char * argv[])
+int main(int argc, char *argv[])
 {
   // force flush of the stdout buffer.
   // this ensures a correct sync of all prints
@@ -254,7 +283,7 @@ int main(int argc, char * argv[])
   rclcpp::executors::SingleThreadedExecutor exe;
 
   std::shared_ptr<LifecycleTalker> lc_node =
-    std::make_shared<LifecycleTalker>("lc_talker");
+      std::make_shared<LifecycleTalker>("lc_talker");
 
   exe.add_node(lc_node->get_node_base_interface());
 
