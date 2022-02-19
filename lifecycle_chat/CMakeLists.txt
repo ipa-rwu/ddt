@@ -17,6 +17,8 @@ find_package(lifecycle_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(nav2_lifecycle_manager REQUIRED)
+find_package(bondcpp REQUIRED)
+find_package(bond REQUIRED)
 
 ### demos
 add_executable(lifecycle_talker
@@ -25,6 +27,8 @@ ament_target_dependencies(lifecycle_talker
   "lifecycle_msgs"
   "rclcpp_lifecycle"
   "std_msgs"
+  "bond"
+  "bondcpp"
 )
 add_executable(lifecycle_listener
   src/lifecycle_listener.cpp)
@@ -39,6 +43,8 @@ ament_target_dependencies(lifecycle_forwarder
   "lifecycle_msgs"
   "rclcpp_lifecycle"
   "std_msgs"
+  "bond"
+  "bondcpp"
 )
 add_executable(lifecycle_service_client
   src/lifecycle_service_client.cpp)
