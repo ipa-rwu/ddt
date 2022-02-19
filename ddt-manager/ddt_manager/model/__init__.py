@@ -45,6 +45,8 @@ class Application(BaseModel):
         if pod_name is None:
             for pod in self.pods:
                 _find_node(pod)
+        elif isinstance(pod_name, Pod):
+            _find_node(pod_name)
         else:
             _find_node(self.find_pod(pod_name))
     def find_processes(self, name):
