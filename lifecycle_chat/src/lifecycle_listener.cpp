@@ -39,7 +39,7 @@ public:
   {
     // Data topic from the lc_talker node
     sub_data_ = this->create_subscription<std_msgs::msg::String>(
-      "lifecycle_chatter", 10,
+      "lifecycle_input", 10,
       std::bind(&LifecycleListener::data_callback, this, std::placeholders::_1));
 
     // Notification event topic. All state changes
