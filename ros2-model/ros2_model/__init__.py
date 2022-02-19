@@ -1,6 +1,8 @@
 from pydantic import BaseModel
 from typing import List
+from typing import Optional
 from enum import Enum, IntEnum
+import logging
 
 class NodeName(BaseModel):
     name: str
@@ -22,6 +24,16 @@ class Node(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
+
+class Connection(BaseModel):
+    entity: Interface
+    emission: Optional[List[Node]]
+    reception: Optional[List[Node]]
+
+    def add_emission(self, node:Node):
+        self.emission.append(node)
+    def add_reception(self, node:Node):
+        self.reception.append(node)
 
 class LifeCyclePrimaryState(IntEnum):
     Unknown        = 0
@@ -52,6 +64,14 @@ class LifeCycleNode(BaseModel):
     class Config:
         arbitrary_types_allowed = True
 
+    def get_transition_number(self, action_name):
+        for action in self.potential_actions:
+            if action_name == action.name:
+                return action.id
+        else:
+            logging.error(f'Transition [{action_name}] is not available for Lifecycle Node [{self.nodename.full_name}]')
+
 class NodeArgs(BaseModel):
     node_name: str
     include_hidden_nodes: bool=False
+    verbose: bool=False
