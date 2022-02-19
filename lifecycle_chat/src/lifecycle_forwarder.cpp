@@ -38,11 +38,12 @@ public:
   }
 
   void
-  publish()
+  publish(const std_msgs::msg::String::SharedPtr originalmsg)
   {
-    static size_t count = 0;
     auto msg = std::make_unique<std_msgs::msg::String>();
-    msg->data = this->get_name() + std::string(": ") + std::to_string(++count);
+    //msg->data = this->get_name() + std::string(": ") + std::to_string(++count);
+    msg->data = this->get_name() + std::string(": Forwarding") + std::string(originalmsg->data.c_str());
+    
 
     // Print the current state for demo purposes
     if (!pub_->is_activated())
@@ -167,7 +168,7 @@ public:
   void data_callback(const std_msgs::msg::String::SharedPtr msg)
   {
     RCLCPP_INFO(get_logger(), "data_callback: %s", msg->data.c_str());
-    this->publish();
+    this->publish(msg);
   }
 
   /// Transition callback for state deactivating
