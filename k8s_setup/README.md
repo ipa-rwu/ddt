@@ -39,7 +39,9 @@ $ ./deploy.sh | kubectl apply -f -
 ##setup network
 ### create bridge
 ```
-create bridge
+# create bridge
+sudo brctl addbr br0
+
 sudo ip addr add 10.0.0.1/24 dev rosmc
 
 ```
