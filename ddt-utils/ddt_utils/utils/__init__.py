@@ -6,8 +6,11 @@ import re
 from ddt_utils.model import Node, LifeCycleNode
 
 TmpFolder= Path(os.getenv("DDT_FOLDER", Path.home() / 'tmp'))
+PodServerPort = os.getenv("POD_SEVER_PORT", 4000)
+RemoteMode = os.getenv("DDT_REMOTE_MODE", False)
 
 DebugPodPrefix = f'DDT-debug-'
+
 class _ExtendedEnum(Enum):
     @classmethod
     def list(cls):
@@ -31,33 +34,76 @@ class SocketActionList(_ExtendedEnum):
     Debug = "start_debug"
     PauseGraph = 'pause_graph'
 
-def get_app_folder(app_id):
-    f = Path(TmpFolder / app_id)
-    f.mkdir(parents=True, exist_ok=True)
+def pod_service_name(pod_id):
+    # return f'{pod_id}_service'
+    return 'localhost'
+
+def remote_probe_server(pod_id):
+    return f'{pod_service_name(pod_id)}:{PodServerPort}'
+
+def remote_app_folder(app_id, pod_id):
+    return f'{remote_probe_server(pod_id)}/{app_id}'
+
+def app_folder(app_id, *, remote, **kwargs):
+    if remote:
+        pod_id = kwargs.get('pod_id')
+        f = remote_app_folder(app_id=app_id, pod_id = pod_id)
+    else:
+        f = Path(TmpFolder / app_id).resolve()
+        f.mkdir(parents=True, exist_ok=True)
     return  f
 
-def get_pod_folder(app_id, pod_id):
-    f = Path(get_app_folder(app_id) / pod_id)
-    f.mkdir(parents=True, exist_ok=True)
+def remote_pod_folder(app_id, pod_id):
+    return f'{remote_probe_server(pod_id)}/{app_id}/{pod_id}'
+
+def pod_folder(app_id, pod_id,*, remote):
+    if remote:
+        f = remote_pod_folder(app_id=app_id, pod_id = pod_id)
+    else:
+        f = Path(app_folder(app_id, remote=False) / pod_id).resolve()
+        f.mkdir(parents=True, exist_ok=True)
     return f
 
-def get_pod_node_folder(app_id, pod_id):
-    f = Path(get_pod_folder(app_id, pod_id) / 'nodes')
-    f.mkdir(parents=True, exist_ok=True)
+def remote_pod_node_folder(app_id, pod_id):
+    return f'{remote_probe_server(pod_id)}/{app_id}/{pod_id}/nodes'
+
+def pod_node_folder(app_id, pod_id, remote):
+    if remote:
+        f = remote_pod_node_folder(app_id=app_id, pod_id = pod_id)
+    else:
+        f = Path(pod_folder(app_id, pod_id, remote=False) / 'nodes')
+        f.mkdir(parents=True, exist_ok=True)
     return  f
 
-def get_pod_lifecycle_folder(app_id, pod_id):
-    f = Path(get_pod_folder(app_id, pod_id) / 'lifecycle_nodes')
-    f.mkdir(parents=True, exist_ok=True)
+def remote_pod_lifecycle_folder(app_id, pod_id):
+    return f'{remote_probe_server(pod_id)}/{app_id}/{pod_id}/lifecycle_nodes'
+
+def pod_lifecycle_folder(app_id, pod_id, *, remote):
+    if remote:
+        f = remote_pod_lifecycle_folder(app_id=app_id, pod_id = pod_id)
+    else:
+        f = Path(pod_folder(app_id, pod_id, remote=False) / 'lifecycle_nodes')
+        f.mkdir(parents=True, exist_ok=True)
     return  f
+
+def remote_dot_file(pod_id, app_id):
+    return f'{remote_probe_server(pod_id)}/{app_id}/{pod_id}/{pod_id}.dot'
+
+def dot_file_path(app_id, pod_id, *, remote):
+    if remote:
+        f = remote_dot_file(app_id=app_id, pod_id = pod_id)
+    else:
+        f = Path(pod_folder(app_id, pod_id, remote=False) /f'{pod_id}.dot')
+    return f
 
 def get_debug_pod_name(node_name):
     return f"{DebugPodPrefix}{re.sub('[^a-zA-Z-]+', '-', node_name)}"
 
 def update_rosmodels(app_id, pod_id, logger = None):
-    path = get_pod_node_folder(app_id, pod_id)
+    path = pod_node_folder(app_id, pod_id, remote=False)
     p = Path(path).glob('**/*.json')
     files = [x for x in p if x.is_file()]
+    print(files)
     try:
         for f in files:
             node = Node.parse_file(str(Path(f).resolve()))
@@ -69,7 +115,7 @@ def update_rosmodels(app_id, pod_id, logger = None):
             return False
 
 def update_lifecycle_models(app_id, pod_id, logger = None):
-    path = get_pod_lifecycle_folder(app_id, pod_id)
+    path = pod_lifecycle_folder(app_id, pod_id, remote=False)
     p = Path(path).glob('**/*.json')
     files = [x for x in p if x.is_file()]
     try:

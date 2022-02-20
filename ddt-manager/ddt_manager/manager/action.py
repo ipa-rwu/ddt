@@ -1,15 +1,23 @@
-import logging
+from shutil import rmtree
 import pygraphviz as pgv
 from pathlib import Path
 import svg_stack as ss
 import svgwrite
 from flask import Markup
+import time
 
-from ddt_utils.utils import get_pod_node_folder
-from ddt_utils.utils import get_pod_folder
-from ddt_utils.utils import get_pod_lifecycle_folder
+from ddt_utils.utils import pod_node_folder
+from ddt_utils.utils import pod_folder
+from ddt_utils.utils import pod_lifecycle_folder
+from ddt_utils.utils import dot_file_path
 
 from ddt_utils.actions import set_process_state
+from ddt_utils.actions import start_command
+from ddt_utils.actions import stop_command
+from ddt_utils.actions import call_command
+
+from ddt_utils.utils import update_lifecycle_models
+from ddt_utils.utils import update_rosmodels
 
 from ros2_model import Node, LifeCycleNode
 
@@ -17,14 +25,23 @@ from ddt_manager.utils import get_app_rosgraph_path
 from ddt_manager.utils import get_pod_domain_svg
 from ddt_manager.utils import get_pod_rosgraph_path
 from ddt_manager.utils import name_app_obj
+from ddt_manager.utils import DDTManagerProcess
 
 def create_url(prefix, name):
     url = f'/{prefix}{name}/add'
     return url
 
-def rewrite_dot(dot_path, name, prefix, logger):
-    org_pt = Path(dot_path).resolve()
-    new_pt = org_pt.parent / f'{name}.svg'
+def command_get_remote_file(link, file_path):
+    return f'wget -O {file_path} {link} '
+
+def get_remote_dot_file(app_id, pod_id):
+    return start_command(command_get_remote_file(dot_file_path(app_id=app_id, pod_id=pod_id, remote=True),
+                                            dot_file_path(pod_id=pod_id, app_id=app_id, remote=False)))
+
+def _rewrite_dot(app_pid, pod_id, prefix, logger):
+    get_remote_dot_file(app_pid, pod_id)
+    org_pt = Path(dot_file_path(pod_id=pod_id, app_id=app_pid, remote=False))
+    new_pt = org_pt.parent / f'{pod_id}.svg'
     if org_pt.is_file:
         try:
             ros_gh = pgv.AGraph(org_pt)
@@ -34,12 +51,42 @@ def rewrite_dot(dot_path, name, prefix, logger):
         except pgv.agraph.DotError:
             logger.error(f'{org_pt.name} of {org_pt.parent.name} from {org_pt.parent.parent.name} is not ready!')
 
-def _make_ros_graph(pod, prefix, folder_path, logger):
-    if folder_path.is_dir():
-        dot_path = folder_path / f'{pod}.dot'
-        if dot_path.is_file():
-            rewrite_dot(dot_path, pod, prefix, logger)
+def command_remote_folder(link, folder):
+    return f'wget -nd -np -P {folder} -r {link}'
 
+def get_remote_node_folder(app_id, pod_id):
+    call_command(command_remote_folder(pod_node_folder(app_id=app_id, pod_id=pod_id, remote=True),
+                                            pod_node_folder(pod_id=pod_id, app_id=app_id, remote=False)))
+
+def get_remote_lifecycle_node_folder(app_id, pod_id):
+    call_command(command_remote_folder(pod_lifecycle_folder(app_id=app_id, pod_id=pod_id, remote=True),
+                                            pod_lifecycle_folder(pod_id=pod_id, app_id=app_id, remote=False)))
+
+def update_remote_ros_models(app_id, pod_id, **kwargs):
+    rmtree(pod_node_folder(pod_id=pod_id, app_id=app_id, remote=False), ignore_errors=True)
+    get_remote_node_folder(app_id, pod_id)
+    return update_rosmodels(app_id=app_id, pod_id=pod_id, **kwargs)
+
+def update_remote_lifecycle_models(app_id, pod_id, **kwargs):
+    rmtree(pod_lifecycle_folder(pod_id=pod_id, app_id=app_id, remote=False), ignore_errors=True)
+    get_remote_lifecycle_node_folder(app_id=app_id, pod_id=pod_id)
+    return update_lifecycle_models(app_id=app_id, pod_id=pod_id, **kwargs)
+
+def update_app_model(app_model, **kwargs):
+    app_id = app_model.name
+    logger = kwargs.get('logger')
+    for pod in app_model.pods:
+        pod_id = pod.name
+        node_models = update_remote_ros_models(app_id, pod_id, **kwargs)
+        if node_models:
+            app_model.add_nodes(pod_id, node_models)
+        life_models = update_remote_ros_models(app_id, pod_id, **kwargs)
+        if life_models:
+            app_model.add_lifecycle_nodes(pod_id, life_models)
+    if logger:
+        logger.info(f'show_graph: Application {app_id} status: ')
+        logger.info(globals()[name_app_obj(app_id)].dict())
+''
 def show_svg(path):
     svg = None
     if path.is_file():
@@ -67,7 +114,7 @@ def _create_domain_svg(app_id, pod_id, domain_id):
     svg_size_height = 80
     file = get_pod_domain_svg(app_id, pod_id).resolve()
     dwg = svgwrite.Drawing(str(file) , (svg_size_width, svg_size_height))
-    g = dwg.g(style="font-size:30;\
+    g = dwg.g(style="font-size:20;\
                     font-family:Comic Sans MS, Arial; \
                     font-weight:bold; \
                     font-style:oblique; \
@@ -87,7 +134,7 @@ def _create_domain_svg(app_id, pod_id, domain_id):
     return file
 
 def update_ros_graph(app, pod, logger):
-    return _make_ros_graph(pod, f'app_{app}/{pod}/__', get_pod_folder(app, pod), logger)
+    return _rewrite_dot(app_pid=app, pod_id=pod, prefix = f'app_{app}/{pod}/__', logger=logger)
 
 def check_state_emit(pod, process, msg, socketio, socket_id):
     process_in_pod = pod.find_process(process.name)
@@ -97,3 +144,7 @@ def check_state_emit(pod, process, msg, socketio, socket_id):
 def set_processes_group(pod, processes, logger, **kwargs):
     for process in processes:
         set_process_state(pod, name = process['name'], pid=process['pid'], logger = logger, **kwargs)
+
+def deploy_pod(deployment_file):
+    pid = start_command(f"kubectl deploy -f {deployment_file}")
+    yield DDTManagerProcess.DDTManagerProcess.name, pid

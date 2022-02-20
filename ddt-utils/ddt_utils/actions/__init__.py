@@ -1,6 +1,9 @@
 from ddt_utils.utils import BridgeMode
 from ros2_model import Node
 from ddt_utils.model import Pod
+import subprocess
+from shlex import split
+import os
 
 def get_bridge_mode(node: Node, if_probe=True):
     bridge_mode = BridgeMode.NoNeed
@@ -38,3 +41,31 @@ def set_process_state(pod: Pod, *, name, **kwargs):
             kwargs['logger'].info(msg)
         except KeyError:
             print(msg)
+
+def start_command(command):
+    print("Start command: ", command)
+    c = split(command)
+    pid = subprocess.Popen(c)
+    return pid
+
+def stop_command(pid):
+    if pid:
+        if isinstance(pid, int):
+            os.kill(pid, subprocess.signal.SIGINT)
+        else:
+            pid.send_signal(subprocess.signal.SIGINT)
+
+def call_command(command):
+    print("Start command: ", command)
+    c = split(command)
+    subprocess.call(c)
+
+def check_pid_running(pid):
+    poll = pid.poll()
+    import time
+    if poll is None:
+        print(f'{pid} is still running')
+        return time.time(), True
+    else:
+        print(f'{pid} is finished')
+        return time.time(), False

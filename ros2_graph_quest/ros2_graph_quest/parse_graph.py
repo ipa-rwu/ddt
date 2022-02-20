@@ -18,7 +18,6 @@ class ParserGraph(rclpy.node.Node):
             namespace='',
             parameters=[
                 ('result_path', ''),
-                ('application_name', "test"),
                 ('sampling_rate', 10),
                 ('mode', "NODE_TOPIC_ALL_GRAPH")
             ]
@@ -29,12 +28,11 @@ class ParserGraph(rclpy.node.Node):
             self.result_path = Path.home()
         self.timer = self.create_timer(self.get_parameter('sampling_rate').value, self.timer_callback)
         self.mode = self.get_parameter('mode').get_parameter_value().string_value
-        self.app_name = self.get_parameter('application_name').get_parameter_value().string_value
 
         self.graph = Graph(self)
         self.graph.set_node_stale(5.0)
 
-        self.get_logger().info(f"Path: {self.result_path}, name: {self.app_name}, Mode: {self.mode}")
+        self.get_logger().info(f"ROSGraph Path: {self.result_path}, Mode: {self.mode}")
 
     def gen_dotcode(self, graph):
         dotcode_factory = PydotFactory()
@@ -53,9 +51,9 @@ class ParserGraph(rclpy.node.Node):
 
     def write_into_dot(self, graph):
         # Write topology
-        with open(self.result_path / f'{self.app_name}.dot', "w") as f:
+        with open(self.result_path, "w") as f:
             f.write(self.gen_dotcode(graph))
-        subprocess.run(["dot", "-Tpng", "-O", self.result_path / f'{self.app_name}.dot'])
+        subprocess.run(["dot", "-Tpng", "-O", self.result_path])
 
     def timer_callback(self):
         self.graph.update()
