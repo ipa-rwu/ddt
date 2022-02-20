@@ -1,30 +1,18 @@
-from enum import Flag
-import subprocess
-from shlex import split
-import os
 from ddt_utils.utils import ProcessList
-from ddt_utils.utils import get_pod_node_folder
-from ddt_utils.utils import get_pod_lifecycle_folder
+from ddt_utils.utils import pod_node_folder
+from ddt_utils.utils import pod_lifecycle_folder
 from ddt_utils.utils import update_lifecycle_models
 from ddt_utils.utils import update_rosmodels
 from ddt_utils.utils import BridgeMode
 from ddt_utils.utils import get_debug_pod_name
+from ddt_utils.utils import dot_file_path
 
 from ddt_utils.actions import get_bridge_mode
+from ddt_utils.actions import start_command
+from ddt_utils.actions import stop_command
 
 from ros2_helpers.parse_topic_info.parse_topic_info import get_connection_info
 
-def start_command(command):
-    print("Start command: ", command)
-    c = split(command)
-    pid = subprocess.Popen(c)
-    return pid
-
-def stop_command(pid):
-    if isinstance(pid, int):
-        os.kill(pid, subprocess.signal.SIGINT)
-    else:
-        pid.send_signal(subprocess.signal.SIGINT)
 
 '''
 @paraeters:
@@ -73,19 +61,20 @@ def start_zenoh(**kwargs):
     pid_zenoh = start_command(f'{debug}{common}{peer}{ls}{allow_topics}')
     return pid_zenoh
 
-def get_ros_graph(pod, folder_path):
-    pid = start_command(f"ros2 launch ros2_graph_quest gen_dot.launch.py application_name:=\"{pod}\" result_path:=\"{folder_path}\" sampling_rate:=\"1\"")
+def get_ros_graph(app_id, pod_id):
+    dot_file = dot_file_path(app_id=app_id, pod_id=pod_id, remote=False)
+    pid = start_command(f"ros2 launch ros2_graph_quest gen_dot.launch.py result_path:=\"{dot_file}\" sampling_rate:=\"1\"")
     yield ProcessList.RosGraphProcess.name, pid
 
 def get_ros_model(app_id, pod_id):
     # pid_ros_model = start_command(f"ros2 launch ros2_graph_quest parse_nodes.launch.py result_path:=\"{app_folder_path}\" sampling_rate:=\"1\"")
-    pid = start_command(f'ros2helper nodes -f {get_pod_node_folder(app_id, pod_id)} -r 1')
+    pid = start_command(f'ros2helper nodes -f {pod_node_folder(app_id, pod_id, remote=False)} -r 1')
     yield ProcessList.NodeParserProcess.name, pid
 
 
 def get_lifecycle_nodes(app_id, pod_id):
     # pid_ros_model = start_command(f"ros2 launch ros2_graph_quest parse_nodes.launch.py result_path:=\"{app_folder_path}\" sampling_rate:=\"1\"")
-    pid = start_command(f'ros2helper lifecycle -f {get_pod_lifecycle_folder(app_id, pod_id)} -r 1')
+    pid = start_command(f'ros2helper lifecycle -f {pod_lifecycle_folder(app_id, pod_id, remote=False)} -r 1')
     yield ProcessList.LifeCycleParserProcess.name, pid
 
 
@@ -93,15 +82,6 @@ def pause_ros_graph(pids):
     print("pause_ros_graph")
     for pid in pids:
         stop_command(pid)
-
-# start rosgraph process
-# save in folder_path/"pod".dot
-def pre_make_ros_graph(pod, folder_path, host = None, debug=True):
-    if not debug:
-        pid = start_zenoh(host)
-        yield ProcessList.GraphBridgeProcess.name, pid
-    pid = get_ros_graph(pod, folder_path)
-    yield ProcessList.RosGraphProcess.name, pid
 
 def update_nodes(app_id, pod_id, pod):
     for node in update_rosmodels(app_id, pod_id):
@@ -133,29 +113,29 @@ def get_debugged_pod_name(node_name):
 * listen_port
 * allow_topics
 '''
-def start_zenoh_process(bridge_mode, allow_topics, **kwargs):
+def start_zenoh_process(allow_topics, **kwargs):
     debug = kwargs.get('debug', None)
     ls = kwargs.get('listen_server', '0.0.0.0')
     lp = kwargs.get('listen_port', 8000)
     domain_id = kwargs.get('domain_id', None)
-    if bridge_mode == BridgeMode.Listener:
-        pid = start_zenoh(debug=debug,
-                            domain_id=domain_id,
-                            allow_topics=allow_topics,
-                            listen_server=ls,
-                            listen_port=lp)
-    if bridge_mode == BridgeMode.Peer:
-        pid = start_zenoh(debug=debug,
-                            domain_id=domain_id,
-                            allow_topics=allow_topics,
-                            dsts = kwargs['dsts'])
-    if bridge_mode == BridgeMode.ListenerPeer:
-        pid = start_zenoh(debug=debug,
-                            domain_id=domain_id,
-                            allow_topics=allow_topics,
-                            dsts = kwargs['dsts'],
-                            listen_server=ls,
-                            listen_port=lp)
+    # if bridge_mode == BridgeMode.Listener:
+    #     pid = start_zenoh(debug=debug,
+    #                         domain_id=domain_id,
+    #                         allow_topics=allow_topics,
+    #                         listen_server=ls,
+    #                         listen_port=lp)
+    # if bridge_mode == BridgeMode.Peer:
+    #     pid = start_zenoh(debug=debug,
+    #                         domain_id=domain_id,
+    #                         allow_topics=allow_topics,
+    #                         dsts = kwargs['dsts'])
+    # if bridge_mode == BridgeMode.ListenerPeer:
+    pid = start_zenoh(debug=debug,
+                        domain_id=domain_id,
+                        allow_topics=allow_topics,
+                        dsts = kwargs['dsts'],
+                        listen_server=ls,
+                        listen_port=lp)
     yield ProcessList.DebugBridgeProcess.name, pid
 
 def decide_bridge_collect_debug_topics(debug_list, PodModel):
@@ -176,25 +156,25 @@ def decide_bridge_collect_debug_topics(debug_list, PodModel):
             node_model = PodModel.find_node(name)
         except KeyError:
             raise
-        if not flag:
-            if bridge == BridgeMode.NoNeed:
-                bridge = get_bridge_mode(node_model)
-            if bridge == BridgeMode.Peer or bridge == BridgeMode.Listener:
-                tmp = get_bridge_mode(node_model)
-                if tmp is not BridgeMode.NoNeed and tmp != bridge:
-                    bridge = BridgeMode.ListenerPeer
-                    flag = True
-                else:
-                    bridge = tmp
-        if get_bridge_mode(node_model) == BridgeMode.Peer:
-            dsts.append(get_debug_pod_name(name))
+        # if not flag:
+        #     if bridge == BridgeMode.NoNeed:
+        #         bridge = get_bridge_mode(node_model)
+        #     if bridge == BridgeMode.Peer or bridge == BridgeMode.Listener:
+        #         tmp = get_bridge_mode(node_model)
+        #         if tmp is not BridgeMode.NoNeed and tmp != bridge:
+        #             bridge = BridgeMode.ListenerPeer
+        #             flag = True
+        #         else:
+        #             bridge = tmp
+        # if get_bridge_mode(node_model) == BridgeMode.Peer:
+        dsts.append(get_debug_pod_name(name))
         if len(topics) == 0:
             topics = _topics(node_model)
         else:
             tmp_list = topics
             topics = _combine_lists(tmp_list, _topics(node_model))
 
-    return bridge, topics, dsts
+    return topics, dsts
 
 def decide_bridge_mode(debug_list, PodModel):
     bridge = BridgeMode.NoNeed

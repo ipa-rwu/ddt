@@ -8,7 +8,6 @@ from ddt_utils.model import Message
 from ddt_utils.model import Pod
 from ddt_utils.model import Process
 
-from ddt_utils.utils import get_pod_folder
 from ddt_utils.utils import ProcessList
 from ddt_utils.utils import SocketActionList
 from ddt_utils.utils import update_lifecycle_models
@@ -59,7 +58,7 @@ async def show_graph(msg):
     pod_id = PodInfo.pod_id
     logging.info(f'{ProcessList.RosGraphProcess.value}: get message ({m})')
     if m.app_id == app_id and m.pod_id == pod_id:
-        processes = get_ros_graph(pod_id, Path(get_pod_folder(app_id, pod_id)))
+        processes = get_ros_graph(app_id=app_id, pod_id=pod_id)
         pss = [dict(zip(("name", "pid"), (name, proc.pid))) for name, proc in processes]
         for ps in pss:
             update_process_in_model(PodModel, ps)
@@ -110,11 +109,11 @@ async def start_debug(msg):
         PodModel.add_lifecycle_node(node_model)
 
     if m.app_id == app_id and m.pod_id == pod_id:
-        bridge_mode, allow_topics, dst_names= decide_bridge_collect_debug_topics(debug_list, PodModel)
-        logging.info(f'Start debug procedure! Bridge type: [{bridge_mode}], Allow topics: {allow_topics}, Peers: {dst_names}]')
+        allow_topics, dst_names= decide_bridge_collect_debug_topics(debug_list, PodModel)
+        logging.info(f'Start debug procedure! Lisen on: [{PodInfo.listen_server}:{PodInfo.listen_port}], Allow topics: {allow_topics}, Peers: {dst_names}]')
         dsts = [ f'{name}:{PodInfo.dst_port}' for name in dst_names]
         # start bridge
-        processes = start_zenoh_process(bridge_mode, debug=PodInfo.debug,
+        processes = start_zenoh_process(debug=PodInfo.debug,
                                         domain_id=PodInfo.domain_id,
                                         allow_topics=allow_topics,
                                         dsts = dsts,
@@ -125,7 +124,7 @@ async def start_debug(msg):
             update_process_in_model(PodModel, ps)
             set_process_state(PodModel, name=ps['name'], pid=ps['pid'], logger=logging, start=True)
         new_msg = msg_start_process(app_id, pod_id, pss)
-        await sio.emit(f'started_{ProcessList.DebugBridgeProcess.value}', new_msg.dict())
+        # await sio.emit(f'started_{ProcessList.DebugBridgeProcess.value}', new_msg.dict())
         # get all topics of this node -- add to allowded topic
 
         # find realted nodes per topic in same pod

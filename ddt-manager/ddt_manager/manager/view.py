@@ -1,9 +1,8 @@
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
-from flask_socketio import SocketIO, send, join_room, leave_room, emit, rooms
+from flask_socketio import SocketIO, join_room, leave_room
 import logging
 import logging.handlers
 from threading import Lock
-from pprint import pprint
 import re
 
 from ddt_utils.model import Message
@@ -12,14 +11,12 @@ from ddt_utils.model import Process
 
 from ddt_utils.utils import ProcessList
 from ddt_utils.utils import SocketActionList
-from ddt_utils.utils import update_lifecycle_models
-from ddt_utils.utils import update_rosmodels
+
 from ddt_utils.utils import DebugPodPrefix
 from ddt_utils.utils import ShowRosGraphProcesses
 
-
 from ddt_manager.utils import AppNames, RoomWebName, RoomWeb, WebID
-from ddt_manager.utils import name_select_nodes
+from ddt_manager.utils import name_debug_nodes_list
 from ddt_manager.utils import get_app_rosgraph_path
 from ddt_manager.utils import name_app_obj
 from ddt_manager.utils import name_app_room
@@ -33,6 +30,7 @@ from ddt_manager.manager.action import combine_rosgraphs
 from ddt_manager.manager.action import show_svg
 from ddt_manager.manager.action import check_state_emit
 from ddt_manager.manager.action import set_processes_group
+from ddt_manager.manager.action import update_app_model
 
 from ddt_manager.model import Application, DebugElement
 
@@ -66,7 +64,7 @@ def favicon():
 def app_page(app_id):
     res= ""
     app_graph_path = get_app_rosgraph_path(app_id)
-    debug_list = globals()[name_select_nodes(app_id)]
+    debug_list = globals()[name_debug_nodes_list(app_id)]
 
     if app_graph_path.is_file():
         res = show_svg(app_graph_path)
@@ -102,11 +100,6 @@ def show_graph(app_id):
 
         update_ros_graph(app_id, pod_id, app.logger)
 
-        app_model.find_pod(pod_id).nodes = list()
-        app_model.add_nodes(pod_id, update_rosmodels(app_id, pod_id, app.logger))
-        app_model.add_lifecycle_nodes(pod_id, update_lifecycle_models(app_id, pod_id, app.logger))
-    # app.logger.info(f'show_graph: Application {app_id} status: ')
-    # app.logger.info(globals()[name_app_obj(app_id)].dict())
     res = combine_rosgraphs(app_obj=app_model)
     return jsonify(result=res)
 
@@ -118,14 +111,14 @@ def stop_process(app_id):
         socketio.emit(SocketActionList.PauseGraph.value, msg.dict(), to = pod.socket_id) #to = name_app_room(app_id)
         processes = [{"name" : p, "pid" : None} for p in ShowRosGraphProcesses]
         set_processes_group(pod, processes, app.logger, stop=True)
-        pod_id = pod.name
-        app_model.find_pod(pod_id).nodes = list()
-        app_model.add_nodes(pod_id, update_rosmodels(app_id, pod_id, app.logger))
-        app_model.add_lifecycle_nodes(pod_id, update_lifecycle_models(app_id, pod_id, app.logger))
+    app.logger.info(f'show_graph: Application {app_id} status: ')
+    app.logger.info(globals()[name_app_obj(app_id)].dict())
 
 @app.route('/app_<string:app_id>/pause_graph')
 def pause_graph(app_id):
     stop_process(app_id)
+    app_model = globals()[name_app_obj(app_id)]
+    update_app_model(app_model, logger=app.logger)
     return ("nothing")
 
 """
@@ -152,11 +145,12 @@ add debug node
 def add_node(app_id, pod_id, node_id):
     stop_process(app_id)
     node_id = node_id.replace('$', '/')
+
     app.logger.info(f'Select debugging node [{node_id}] from pod [{pod_id}]')
     debug_instance = DebugElement(pod=pod_id, node=node_id)
     # return jsonify(result=debug_instance.json())
     try:
-        debug_list = globals()[name_select_nodes(app_id)]
+        debug_list = globals()[name_debug_nodes_list(app_id)]
         if not debug_instance in debug_list:
             debug_list.append(debug_instance)
     except KeyError:
@@ -173,7 +167,7 @@ def delete_debug_node(app_id, pod_id, node_id):
     delete_debug_instance = DebugElement(pod=pod_id, node=node_id)
     # return jsonify(result=debug_instance.json())
     try:
-        debug_list = globals()[name_select_nodes(app_id)]
+        debug_list = globals()[name_debug_nodes_list(app_id)]
         if  delete_debug_instance in debug_list:
             debug_list.remove(delete_debug_instance)
     except KeyError:
@@ -187,6 +181,7 @@ handle debug list
 def handle_debug(app_id):
     app_model = globals()[name_app_obj(app_id)]
     if request.method == 'POST':
+        # update_app_model(app_model, logger=app.logger)
         pod_nodes = dict()
         for l in get_list(('debug_pod', 'debug_node')):
             debug_node_name = l['debug_node']
@@ -261,7 +256,7 @@ def on_join(msg):
         AppNames.append(app_id)
         # create an instance of Application
         globals()[name_app_obj(app_id)] = Application(name = app_id)
-        globals()[name_select_nodes(app_id)] = list()
+        globals()[name_debug_nodes_list(app_id)] = list()
         if WebID:
             join_room(name_app_room(app_id), sid = WebID)
         RoomWeb.append(app_id)
@@ -333,6 +328,8 @@ def started_ori_bridge(msg):
     p = globals()[name_app_obj(app_id)].find_pod(pod_id)
     set_processes_group(p, m.processes, app.logger, start=True)
     # deploy debug pod
+    debug_list = globals()[name_debug_nodes_list(app_id)]
+
 
 # @socketio.event
 # def my_ping():
@@ -363,7 +360,7 @@ def on_leave(msg):
         cleanup_folder(app_id)
         del globals()[name_app_obj(app_id)]
         del globals()[name_app_room(app_id)]
-        del globals()[name_select_nodes(app_id)]
+        del globals()[name_debug_nodes_list(app_id)]
         RoomWeb.remove(app_id)
         AppNames.remove(app_id)
     socketio.emit('show_log', msg.dict(), to = RoomWebName)
