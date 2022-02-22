@@ -1,4 +1,4 @@
-#DDT
+# DDT
 
 ## Setup k8s
 
@@ -40,7 +40,7 @@ $ ./deploy.sh | kubectl apply -f -
 ### create bridge
 ```
 # create bridge
-sudo brctl addbr br0
+sudo brctl addbr rosmc
 
 sudo ip addr add 10.0.0.1/24 dev rosmc
 
