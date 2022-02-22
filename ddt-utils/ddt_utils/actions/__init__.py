@@ -4,6 +4,9 @@ from ddt_utils.model import Pod
 import subprocess
 from shlex import split
 import os
+import psutil
+import signal
+import time
 
 def get_bridge_mode(node: Node, if_probe=True):
     bridge_mode = BridgeMode.NoNeed
@@ -19,12 +22,17 @@ def set_process_state(pod: Pod, *, name, **kwargs):
     p = pod.find_process(name)
     flag_start = kwargs.get('start', False)
     flag_stop = kwargs.get('stop', False)
-    if not p.state and flag_start:
+    msg = f'Set Process [{name}] state from [{"start" if p.state else "stop"}] to [{"start" if flag_start else "stop"}]'
+    try:
+        kwargs['logger'].info(msg)
+    except KeyError:
+        print(msg)
+    if p.state is False and flag_start:
         try:
             pid = kwargs['pid']
             p.start(pid=pid)
+            msg = f'Start Proceess[name: {name}, pid: {pid}]'
             try:
-                msg = f'Start Proceess[name: {name}, pid: {pid}]'
                 kwargs['logger'].info(msg)
             except KeyError:
                 print(msg)
@@ -34,10 +42,10 @@ def set_process_state(pod: Pod, *, name, **kwargs):
                 kwargs['logger'].error(msg)
             except KeyError:
                 print(msg)
-    elif p.state and flag_stop:
+    if p.state and flag_stop:
+        msg = f'Stop Proceess[name: {name}, pid: {[p.pid]}]'
         p.stop()
         try:
-            msg = f'Stop Proceess[name: {name}]'
             kwargs['logger'].info(msg)
         except KeyError:
             print(msg)
@@ -48,12 +56,46 @@ def start_command(command):
     pid = subprocess.Popen(c)
     return pid
 
-def stop_command(pid):
+def stop_command(pid, **kwargs):
+    logger = kwargs.get('logger')
+    result = False
+    if not result:
+        check_time = time.time()
     if pid:
         if isinstance(pid, int):
-            os.kill(pid, subprocess.signal.SIGINT)
+            p = psutil.Process(pid)
+            # os.kill(pid, signal.SIGINT)
+            p.send_signal(signal.SIGTERM)
+            if logger:
+                msg = f'kill process pid[{pid}]'
+                logger.info(msg)
+            else:
+                print(msg)
+            try:
+                for child in p.children():
+                    child.send_signal(signal.SIGTERM)
+                    # os.kill(child.pid, signal.SIGINT)
+                    if logger:
+                        msg = f'Find child process pid[{pid}]'
+                        logger.info(msg)
+                    else:
+                        print(msg)
+            except psutil.NoSuchProcess:
+                pass
+            # *_, result = check_pid_running(pid)
+            # while result:
+            #     current_time = time.time()
+            #     if current_time - check_time> 60:
+            #         msg, check_time, result = check_pid_running(pid)
+            # os.kill(pid, signal.SIGINT)
+
         else:
-            pid.send_signal(subprocess.signal.SIGINT)
+            pid.send_signal(subprocess.signal.SIGTERM)
+            if logger:
+                msg = f'send signal to kill process pid[{pid}]'
+                logger.info(msg)
+            else:
+                print(msg)
 
 def call_command(command):
     print("Start command: ", command)
@@ -61,11 +103,11 @@ def call_command(command):
     subprocess.call(c)
 
 def check_pid_running(pid):
-    poll = pid.poll()
-    import time
-    if poll is None:
-        print(f'{pid} is still running')
-        return time.time(), True
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        msg = f'pid[{pid}] is unassigned"'
+        return msg, time.time(), False
     else:
-        print(f'{pid} is finished')
-        return time.time(), False
+        msg = f'pid[{pid}] is in use"'
+        return msg, time.time(), True

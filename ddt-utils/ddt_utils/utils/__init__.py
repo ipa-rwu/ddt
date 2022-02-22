@@ -6,8 +6,7 @@ import re
 from ddt_utils.model import Node, LifeCycleNode
 
 TmpFolder= Path(os.getenv("DDT_FOLDER", Path.home() / 'tmp'))
-PodServerPort = os.getenv("POD_SEVER_PORT", 4000)
-RemoteMode = os.getenv("DDT_REMOTE_MODE", False)
+PodServerPort = os.getenv("DDT_PROBE_SERVER_PORT", 4000)
 
 DebugPodPrefix = f'DDT-debug-'
 
@@ -36,7 +35,7 @@ class SocketActionList(_ExtendedEnum):
 
 def pod_service_name(pod_id):
     # return f'{pod_id}_service'
-    return 'localhost'
+    return pod_id
 
 def remote_probe_server(pod_id):
     return f'{pod_service_name(pod_id)}:{PodServerPort}'
@@ -45,9 +44,17 @@ def remote_app_folder(app_id, pod_id):
     return f'{remote_probe_server(pod_id)}/{app_id}'
 
 def app_folder(app_id, *, remote, **kwargs):
+    logger = kwargs.get('logger')
     if remote:
         pod_id = kwargs.get('pod_id')
-        f = remote_app_folder(app_id=app_id, pod_id = pod_id)
+        if pod_id:
+            f = remote_app_folder(app_id=app_id, pod_id = pod_id)
+        else:
+            msg = f'Please provide Pod name to get remote Application[{app_id}] folder'
+            if logger:
+                logger.error(msg)
+            else:
+                print(msg)
     else:
         f = Path(TmpFolder / app_id).resolve()
         f.mkdir(parents=True, exist_ok=True)
