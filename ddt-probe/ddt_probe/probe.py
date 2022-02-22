@@ -1,5 +1,6 @@
 #! /usr/bin/env python3
 import asyncio
+from importlib.resources import path
 import socketio
 import logging
 from pathlib import Path
@@ -8,7 +9,7 @@ from ddt_utils.model import Message
 from ddt_utils.model import Pod
 from ddt_utils.model import Process
 
-from ddt_utils.utils import ProcessList
+from ddt_utils.utils import ProcessList, pod_lifecycle_folder, pod_node_folder
 from ddt_utils.utils import SocketActionList
 from ddt_utils.utils import update_lifecycle_models
 from ddt_utils.utils import update_rosmodels
@@ -18,7 +19,7 @@ from ddt_utils.actions import set_process_state
 
 from ros2_model import LifeCycleActionsEnum
 
-from ddt_probe.action import get_ros_model
+from ddt_probe.action import backup_to_finial, get_ros_model
 from ddt_probe.action import stop_command
 from ddt_probe.action import get_ros_graph
 from ddt_probe.action import get_lifecycle_nodes
@@ -49,7 +50,7 @@ def msg_start_process(app_id, pod_id, ps):
 def update_process_in_model(pod: Pod, ps):
     if ps['name'] not in [ process.name for process in pod.processes]:
         pod.processes.append(Process(name = ps['name'], pid = ps['pid']))
-    logging.info(f'Current processes in Pod [{pod.name}] are {pod.processes}')
+        logging.info(f'Add {pod.processes} to Pod [{pod.name}]')
 
 @sio.on(ProcessList.RosGraphProcess.value)
 async def show_graph(msg):
@@ -156,8 +157,14 @@ async def pause_graph(msg):
     m = Message(**msg)
     pod_name = m.pod
     for ps in PodModel.processes:
-        stop_command(ps.pid)
+        stop_command(ps.pid, logger=logging)
         set_process_state(PodModel, name=ps.name, logger=logging, stop=True)
+    node_folder =pod_node_folder(app_id=PodInfo.app_id, pod_id=PodInfo.pod_id, remote=False)
+    life_node_folder=pod_lifecycle_folder(app_id=PodInfo.app_id, pod_id=PodInfo.pod_id, remote=False)
+    backup_to_finial(result_path = node_folder,
+                        bk_path=Path('_'.join([Path(node_folder).name, 'bk'])))
+    backup_to_finial(result_path=life_node_folder,
+                    bk_path=Path('_'.join([Path(life_node_folder).name, 'bk'])))
     update_nodes(PodInfo.app_id, PodInfo.pod_id, PodModel)
     update_lifecycle_nodes(PodInfo.app_id, PodInfo.pod_id, PodModel)
     PodModel.update()
@@ -192,8 +199,7 @@ async def cleanup():
     for ps in ShowRosGraphProcesses:
         set_process_state(PodModel, name=ps, logger=logging, stop=True)
         pid = PodModel.find_process(ps).pid
-        stop_command(pid)
-    stop_command(pid)
+        stop_command(pid, logger=logging)
     await sio.emit('leave', msg.dict())
     await sio.disconnect()
 
