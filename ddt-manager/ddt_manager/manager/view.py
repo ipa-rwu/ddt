@@ -1,4 +1,8 @@
+from pathlib import Path
+from ddt_utils.actions import start_command
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
+from flask import flash
+from werkzeug.utils import secure_filename
 from flask_socketio import SocketIO, join_room, leave_room
 import logging
 import logging.handlers
@@ -11,11 +15,11 @@ from ddt_utils.model import Process
 
 from ddt_utils.utils import ProcessList
 from ddt_utils.utils import SocketActionList
-
+from ddt_utils.utils import TmpFolder
 from ddt_utils.utils import DebugPodPrefix
 from ddt_utils.utils import ShowRosGraphProcesses
 
-from ddt_manager.utils import AppNames, RoomWebName, RoomWeb, WebID
+from ddt_manager.utils import ALLOWED_EXTENSIONS, AppNames, RoomWebName, RoomWeb, WebID
 from ddt_manager.utils import name_debug_nodes_list
 from ddt_manager.utils import get_app_rosgraph_path
 from ddt_manager.utils import name_app_obj
@@ -24,6 +28,7 @@ from ddt_manager.utils import get_list
 from ddt_manager.utils import get_rooms
 from ddt_manager.utils import cleanup_folder
 from ddt_manager.utils import get_log_path
+from ddt_manager.utils import debug_deployment_folder
 
 from ddt_manager.manager.action import update_ros_graph
 from ddt_manager.manager.action import combine_rosgraphs
@@ -37,6 +42,8 @@ from ddt_manager.model import Application, DebugElement
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret'
 app.config['DEBUG'] = True
+app.config['UPLOAD_FOLDER'] = TmpFolder
+
 socketio = SocketIO(app)
 
 thread = None
@@ -46,7 +53,7 @@ log.setLevel(logging.ERROR)
 handler = logging.handlers.RotatingFileHandler(
         get_log_path(),
         maxBytes=1024 * 1024)
-app.logger.addHandler(handler)
+# app.logger.addHandler(handler)
 
 @app.route('/')
 def index():
@@ -69,6 +76,10 @@ def app_page(app_id):
     if app_graph_path.is_file():
         res = show_svg(app_graph_path)
     button_show_graph = True
+    p = Path(debug_deployment_folder(app_id=app_id)).glob('**/*')
+    # print(list(p))
+    files = [x.name for x in p if x.is_file()]
+    # print(files)
     try:
         app_model = globals()[name_app_obj(app_id)]
         for pod, proc in app_model.find_processes(ProcessList.RosGraphProcess.name):
@@ -79,8 +90,8 @@ def app_page(app_id):
     return render_template('app.html', app_id=app_id,
                                         ros_graph = res,
                                         debug_list = debug_list,
-                                        button_show_graph = button_show_graph)
-
+                                        button_show_graph = button_show_graph,
+                                        upload_files = files)
 
 @app.route('/app_<string:app_id>/show_graph')
 def show_graph(app_id):
@@ -202,6 +213,46 @@ def handle_debug(app_id):
         app.logger.info(f'Request debugging in Application {app_id}: ')
         app.logger.info(globals()[name_app_obj(app_id)].debug)
     return redirect(url_for('app_page', app_id=app_id))
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@app.route('/app_<string:app_id>/upload', methods=['GET', 'POST'])
+def upload(app_id):
+    if request.method == 'POST':
+        # check if the post request has the file part
+        if 'file' not in request.files:
+            flash('No file part')
+            return redirect(request.url)
+        file = request.files['file']
+        # If the user does not select a file, the browser submits an
+        # empty file without a filename.
+        if not re.match(DebugPodPrefix, file.filename):
+            flash('Plese name deployment file with prefix[{DebugPodPrefix}]')
+            return redirect(url_for('app_page', app_id=app_id))
+        if file.filename == '':
+            flash('No selected file')
+            return redirect(url_for('app_page', app_id=app_id))
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            file.save(Path(debug_deployment_folder(app_id=app_id)/filename))
+            return redirect(url_for('app_page', app_id=app_id))
+
+@app.route('/app_<string:app_id>/delete_deployments', methods=['GET', 'POST'])
+def delete_deployments(app_id):
+    app.logger.info(f'delete deployment')
+    if request.method == 'POST':
+        filename = request.form.get("file")
+        Path(debug_deployment_folder(app_id=app_id)/filename).unlink()
+        return redirect(url_for('app_page', app_id=app_id))
+
+@app.route('/app_<string:app_id>/comfirm_upload', methods=['GET', 'POST'])
+def comfirm_upload(app_id):
+    if request.method == 'POST':
+        debug_deployment_files = get_list(["file"])
+        app.logger.info(f'Get deployment files for debug target nodes: {debug_deployment_files}')
+        return redirect(url_for('app_page', app_id=app_id))
 
 def monitor_applist_thread():
     """Example of how to send server generated events to clients."""
@@ -329,6 +380,8 @@ def started_ori_bridge(msg):
     set_processes_group(p, m.processes, app.logger, start=True)
     # deploy debug pod
     debug_list = globals()[name_debug_nodes_list(app_id)]
+    # for debug_node in debug_list:
+    #     start_call()
 
 
 # @socketio.event

@@ -6,6 +6,8 @@ from flask import request
 from ddt_utils.utils import app_folder
 from ddt_utils.utils import pod_folder
 from ddt_utils.utils import TmpFolder
+from ddt_utils.utils import DebugPodPrefix
+
 import datetime
 
 AppNames = list()
@@ -14,6 +16,7 @@ Apps = list()
 RoomWeb = list()
 RoomWebName = 'Room-Web'
 WebID = None
+ALLOWED_EXTENSIONS = {'yaml', 'yml'}
 
 class DDTManagerProcess(IntEnum):
     K8sDeployPod = auto()
@@ -32,6 +35,14 @@ def get_app_rosgraph_path(app_id):
 def get_pod_domain_svg(app_id, pod_id):
     return Path(pod_folder(app_id, pod_id, remote=False) / f'domain_id.svg')
 
+def debug_deployment_folder(app_id):
+    folder = Path(app_folder(app_id=app_id, remote=False) / 'debug_deployment')
+    folder.mkdir(exist_ok=True, parents=True)
+    return folder
+
+def debug_deployment_file(app_id, node):
+    return debug_deployment_folder(app_id=app_id, remote=False) / f'{DebugPodPrefix}{node}.yaml'
+
 def get_rooms(sid):
     l = rooms(sid)
     l.remove(sid)
@@ -45,9 +56,9 @@ def name_app_obj(app):
 
 def cleanup_folder(app_id, pod_id=None):
     if pod_id:
-        rmtree(str(pod_folder(app_id,pod_id)), ignore_errors=True)
+        rmtree(str(pod_folder(app_id,pod_id, remote=False)), ignore_errors=True)
     else:
-        rmtree(str(app_folder(app_id)), ignore_errors=True)
+        rmtree(str(app_folder(app_id, remote=False)), ignore_errors=True)
 
 def name_debug_nodes_list(app):
     return f'debug_nodenames_{app}'

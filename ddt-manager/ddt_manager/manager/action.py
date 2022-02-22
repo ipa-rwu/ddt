@@ -26,6 +26,7 @@ from ddt_manager.utils import get_pod_domain_svg
 from ddt_manager.utils import get_pod_rosgraph_path
 from ddt_manager.utils import name_app_obj
 from ddt_manager.utils import DDTManagerProcess
+from ddt_manager.utils import debug_deployment_file
 
 def create_url(prefix, name):
     url = f'/{prefix}{name}/add'
@@ -145,6 +146,15 @@ def set_processes_group(pod, processes, logger, **kwargs):
     for process in processes:
         set_process_state(pod, name = process['name'], pid=process['pid'], logger = logger, **kwargs)
 
-def deploy_pod(deployment_file):
-    pid = start_command(f"kubectl deploy -f {deployment_file}")
-    yield DDTManagerProcess.DDTManagerProcess.name, pid
+def deploy_pod(app_id, node_id, **kwargs):
+    logger = kwargs['logger']
+    deployment_file = debug_deployment_file(app_id=app_id, node=node_id)
+    if deployment_file.is_file():
+        pid = start_command(f"kubectl apply -f {deployment_file}")
+        return True
+    elif logger:
+        msg = f'Deployment file [{deployment_file}] is not found. Please upload it'
+        logger.error(msg)
+    else:
+        print(msg)
+    return False
