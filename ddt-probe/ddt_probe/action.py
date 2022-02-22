@@ -11,6 +11,9 @@ from ddt_utils.actions import get_bridge_mode
 from ddt_utils.actions import start_command
 from ddt_utils.actions import stop_command
 
+from shutil import rmtree, copy
+from pathlib import Path
+
 from ros2_helpers.parse_topic_info.parse_topic_info import get_connection_info
 
 
@@ -25,9 +28,9 @@ from ros2_helpers.parse_topic_info.parse_topic_info import get_connection_info
 '''
 def start_zenoh(**kwargs):
     if 'domain_id' in kwargs and kwargs["domain_id"] is not None:
-        common = f'/home/ruichao/fun/ddt_ws/zenoh-plugin-dds/target/release/zenoh-bridge-dds -d {kwargs["domain_id"]} '
+        common = f'/root/zenoh-bridge-dds -d {kwargs["domain_id"]} '
     else:
-        common = f'./root/zenoh-bridge-dds -d $ROS_DOMAIN_ID '
+        common = f'/root/zenoh-bridge-dds -d $ROS_DOMAIN_ID '
     debug=''
     if 'debug' in kwargs and kwargs["debug"] is not None:
         debug = f'RUST_LOG={kwargs["debug"].upper() }'
@@ -78,10 +81,10 @@ def get_lifecycle_nodes(app_id, pod_id):
     yield ProcessList.LifeCycleParserProcess.name, pid
 
 
-def pause_ros_graph(pids):
+def pause_ros_graph(pids, **kwargs):
     print("pause_ros_graph")
     for pid in pids:
-        stop_command(pid)
+        stop_command(pid, kwargs)
 
 def update_nodes(app_id, pod_id, pod):
     for node in update_rosmodels(app_id, pod_id):
@@ -189,6 +192,15 @@ def decide_bridge_mode(debug_list, PodModel):
             else:
                 bridge = tmp
     return bridge
+
+def backup_to_finial(result_path, bk_path):
+    if bk_path.is_dir():
+        if result_path.is_dir():
+            rmtree(result_path, ignore_errors=True)
+        result_path.mkdir(exist_ok=True, parents=True)
+        for i in Path(bk_path).glob('*.json'):
+            print(i)
+            copy(i, result_path / i.name)
 
 def kill_node():
     NotImplemented
