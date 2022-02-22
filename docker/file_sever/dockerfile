@@ -1,0 +1,4 @@
+FROM nginx
+ARG TMP_FOLDER
+
+COPY TMP_FOLDER/ /usr/share/nginx/html

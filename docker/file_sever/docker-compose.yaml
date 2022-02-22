@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        TMP_FOLDER: ${HOME}/tmp
+    image: inspiron:5000/file-server
+    ports:
+      - "5001:5001"
+    container_name: file_server

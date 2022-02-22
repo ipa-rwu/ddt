@@ -3,7 +3,8 @@
 set -e
 set -o pipefail
 function builder_setup {
-    apt_get_install python3-colcon-common-extensions
+    apt_get_install python3-colcon-common-extensions python3-catkin-pkg python3-pip
+    python3 -m pip install catkin_pkg
 }
 function grep_opt {
     grep "$@" || [[ $? = 1 ]]

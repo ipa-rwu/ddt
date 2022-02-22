@@ -1,0 +1,122 @@
+version: '3'
+
+services:
+
+  builder:
+    image: inspiron:5000/builder:ros2
+    build:
+      context: ./docker/builder/ros2
+      dockerfile: Dockerfile
+
+  ros:
+    image: inspiron:5000/ros:galactic
+    build:
+      context: ./docker/galactic_zenoh
+      dockerfile: Dockerfile
+    depends_on:
+      - builder
+
+  ros2-model:
+    image: inspiron:5000/ros2-model:latest
+    build:
+      context: ./ros2-model
+      dockerfile: Dockerfile
+      args:
+        - PKG=ros2-model
+
+  ddt-utils:
+    image: inspiron:5000/ddt-utils:latest
+    build:
+      context: ./ddt-utils
+      dockerfile: Dockerfile
+      args:
+        - PKG=ddt-utils
+        - BASE_IMAGE=ros2-model
+        - PREFIX=inspiron:5000/
+        - SUFFIX=:latest
+    depends_on:
+      - ros2-model
+
+  ddt-manager:
+    image: inspiron:5000/ddt-manager:latest
+    build:
+      context: ./ddt-manager
+      dockerfile: Dockerfile
+      args:
+        - PKG=ddt-manager
+        - BASE_IMAGE=ddt-utils
+        - PREFIX=inspiron:5000/
+        - SUFFIX=:latest
+    ports:
+      - 5000:1234
+      - 4001:4000
+    environment:
+      - FLASK_ENV=development
+      - DDT_FOLDER=/ddt
+      - DDT_PROBE_SERVER_PORT=4000
+    depends_on:
+      - ddt-utils
+
+  ros2-helpers:
+    image: inspiron:5000/ros2-helpers:latest
+    build:
+      context: ./ros2-helpers
+      dockerfile: Dockerfile
+      args:
+        - PKG=ros2-helpers
+        - PREFIX=inspiron:5000/
+        - BASE_IMAGE=ros2-model
+        - SUFFIX=:latest
+        - BASE_SUFFIX=:galactic
+    depends_on:
+      - ros2-model
+      - ros
+
+  ros2-graph-quest:
+    image: inspiron:5000/ros2-graph-quest:latest
+    build:
+      context: ./ros2_graph_creator
+      dockerfile: Dockerfile
+      args:
+        - PKG=ros2-graph-quest
+        - PREFIX=inspiron:5000/
+        - BUILDER_SUFFIX=:ros2
+        - SUFFIX=:galactic
+    depends_on:
+      - ros
+
+  ddt-probe:
+    image: inspiron:5000/ddt-probe:latest
+    build:
+      context: ./ddt-probe
+      dockerfile: Dockerfile
+      args:
+        - PKG=ddt-probe
+        - PREFIX=inspiron:5000/
+        - SUFFIX=:latest
+        - DDT_UTILS_IMAGE=ddt-utils
+        - HELPER_IMAGE=ros2-helpers
+        - GRAPH_IMAGE=ros2-graph-quest
+    ports:
+      - 5000:1234
+      - 4001:4000
+    environment:
+      - FLASK_ENV=development
+      - DDT_FOLDER=/ddt
+      - DDT_PROBE_SERVER_PORT=4000
+    depends_on:
+      - ddt-utils
+      - ros2-helpers
+      - ros2-graph-quest
+
+  ddt-demo:
+    image: inspiron:5000/ddt-demo:latest
+    build:
+      context: ./lifecycle_chat
+      dockerfile: Dockerfile
+      args:
+        - PREFIX=inspiron:5000/
+        - SUFFIX=:latest
+        - PROBE=ddt-probe
+    depends_on:
+      - ddt-probe
