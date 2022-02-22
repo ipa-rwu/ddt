@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:experimental
-ARG SUFFIX=
-ARG BUILDER_SUFFIX=:ros2
-ARG PREFIX=rachelwu/
-FROM ${PREFIX}ros:galactic as base
-FROM ${PREFIX}builder${BUILDER_SUFFIX} as builder
+ARG SUFFIX
+ARG PREFIX
+ARG PROBE
+FROM ${PREFIX}builder:ros2 as builder
+FROM ${PREFIX}${PROBE}${SUFFIX} as base
 
 FROM base as build
 COPY . /root/ws/src/targets/
@@ -14,24 +14,12 @@ RUN --mount=type=bind,from=builder,target=/builder \
     /builder/workspace.bash build_workspace /root/ws && \
     rm -rf /var/lib/apt/lists/*
 
-FROM build as test
-RUN --mount=type=bind,from=builder,target=/builder \
-    apt-get update -qq && \
-    /builder/workspace.bash test_workspace /root/ws && \
-    rm -rf /var/lib/apt/lists/*
+# FROM build as install
+# RUN --mount=type=bind,from=builder,target=/builder \
+#     apt-get update -qq && \
+#     /builder/workspace.bash install_workspace /root/ws && \
+#     rm -rf /var/lib/apt/lists/*
 
-FROM build as install
-RUN --mount=type=bind,from=builder,target=/builder \
-    apt-get update -qq && \
-    /builder/workspace.bash install_workspace /root/ws && \
-    rm -rf /var/lib/apt/lists/*
-
-FROM install as full
-RUN --mount=type=bind,from=builder,target=/builder \
-    apt-get update -qq && \
-    /builder/workspace.bash install_depends /root/ws && \
-    rm -rf /var/lib/apt/lists/*
-
-FROM build as deploy
-ENV SETUP=/root/ws/install/setup.sh
-CMD ["ros2", "launch", "lifecycle_chat", "auro_start_lifecycle_demo.launch.py", "number_of_talkers:=3"]
+# ENV SETUP=/root/ws/install/setup.sh
+WORKDIR /app/ddt-probe
+CMD ["ros2", "launch", "lifecycle_chat", "scenario1.py"]

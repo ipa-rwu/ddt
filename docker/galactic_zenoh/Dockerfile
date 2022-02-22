@@ -9,6 +9,8 @@ RUN apt-get update -qq && \
 COPY zenoh-bridge-dds /root/
 COPY dds_setting.xml /root/
 
+ARG net_interface=eth0
+ENV NETINTERFACE=$net_interface
 ENV CYCLONEDDS_URI=/root/dds_setting.xml
 COPY ./ros_entrypoint.sh /
 RUN chmod +x /ros_entrypoint.sh
