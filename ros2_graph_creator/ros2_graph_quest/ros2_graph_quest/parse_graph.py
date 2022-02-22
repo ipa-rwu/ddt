@@ -8,8 +8,8 @@ import rclpy.action
 from rqt_graph.dotcode import RosGraphDotcodeGenerator
 from rqt_graph.rosgraph2_impl import Graph
 from qt_dotgraph.pydotfactory import PydotFactory
-
 import rclpy.node
+
 class ParserGraph(rclpy.node.Node):
     def __init__(self):
         super().__init__('graph_parser')
