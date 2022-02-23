@@ -2,6 +2,7 @@ from pathlib import Path
 from enum import Enum, IntEnum, auto
 import os
 import re
+import socket
 
 from ddt_utils.model import Node, LifeCycleNode
 
@@ -33,22 +34,50 @@ class SocketActionList(_ExtendedEnum):
     Debug = "start_debug"
     PauseGraph = 'pause_graph'
 
-def pod_service_name(pod_id):
-    # return f'{pod_id}_service'
-    return pod_id
+def getIP(d):
+    """
+    This method returns the first IP address string
+    that responds as the given domain name
+    """
+    try:
+        data = socket.gethostbyname(d)
+        ip = repr(data)
+        return ip
+    except Exception:
+        # fail gracefully!
+        return False
 
-def remote_probe_server(pod_id):
-    return f'{pod_service_name(pod_id)}:{PodServerPort}'
+"""
+pod_ip
+logger
+"""
+def pod_service(pod_id, **kwargs):
+    logger = kwargs.get('logger')
+    ip = getIP(pod_id)
+    pod_ip = kwargs.get('pod_ip')
+    if ip:
+        msg = f"Find IP of pod [{pod_id}], will use pod ip [{ip}]"
+        return ip
+    elif pod_ip:
+        msg = f"Couldn't find IP of pod [{pod_id}], will use pod ip [{pod_ip}]"
+        logger.info(msg) if logger else print(msg)
+        return pod_ip
+    else:
+        msg = f"Couldn't find IP of pod[{pod_id}], please provide IP direcly"
+        logger.info(msg) if logger else print(msg)
 
-def remote_app_folder(app_id, pod_id):
-    return f'{remote_probe_server(pod_id)}/{app_id}'
+def remote_probe_server(pod_id, **kwargs):
+    return f'{pod_service(pod_id, **kwargs)}:{PodServerPort}'
+
+def remote_app_folder(app_id, pod_id, **kwargs):
+    return f'{remote_probe_server(pod_id, **kwargs)}/{app_id}'
 
 def app_folder(app_id, *, remote, **kwargs):
     logger = kwargs.get('logger')
     if remote:
         pod_id = kwargs.get('pod_id')
         if pod_id:
-            f = remote_app_folder(app_id=app_id, pod_id = pod_id)
+            f = remote_app_folder(app_id=app_id, **kwargs)
         else:
             msg = f'Please provide Pod name to get remote Application[{app_id}] folder'
             if logger:
@@ -60,77 +89,72 @@ def app_folder(app_id, *, remote, **kwargs):
         f.mkdir(parents=True, exist_ok=True)
     return  f
 
-def remote_pod_folder(app_id, pod_id):
-    return f'{remote_probe_server(pod_id)}/{app_id}/{pod_id}'
+def remote_pod_folder(app_id, pod_id, **kwargs):
+    return f'{remote_probe_server(pod_id, **kwargs)}/{app_id}/{pod_id}'
 
-def pod_folder(app_id, pod_id,*, remote):
+def pod_folder(app_id, pod_id,*, remote, **kwargs):
     if remote:
-        f = remote_pod_folder(app_id=app_id, pod_id = pod_id)
+        f = remote_pod_folder(app_id=app_id, pod_id = pod_id, **kwargs)
     else:
-        f = Path(app_folder(app_id, remote=False) / pod_id).resolve()
+        f = Path(app_folder(app_id, remote=False, **kwargs) / pod_id).resolve()
         f.mkdir(parents=True, exist_ok=True)
     return f
 
-def remote_pod_node_folder(app_id, pod_id):
-    return f'{remote_probe_server(pod_id)}/{app_id}/{pod_id}/nodes'
+def remote_pod_node_folder(app_id, pod_id, **kwargs):
+    return f'{remote_probe_server(pod_id, **kwargs)}/{app_id}/{pod_id}/nodes'
 
-def pod_node_folder(app_id, pod_id, remote):
+def pod_node_folder(app_id, pod_id, remote, **kwargs):
     if remote:
-        f = remote_pod_node_folder(app_id=app_id, pod_id = pod_id)
+        f = remote_pod_node_folder(app_id=app_id, pod_id = pod_id, **kwargs)
     else:
-        f = Path(pod_folder(app_id, pod_id, remote=False) / 'nodes')
+        f = Path(pod_folder(app_id, pod_id, remote=False, **kwargs) / 'nodes')
         f.mkdir(parents=True, exist_ok=True)
     return  f
 
-def remote_pod_lifecycle_folder(app_id, pod_id):
-    return f'{remote_probe_server(pod_id)}/{app_id}/{pod_id}/lifecycle_nodes'
+def remote_pod_lifecycle_folder(app_id, pod_id,  **kwargs):
+    return f'{remote_probe_server(pod_id, **kwargs)}/{app_id}/{pod_id}/lifecycle_nodes'
 
-def pod_lifecycle_folder(app_id, pod_id, *, remote):
+def pod_lifecycle_folder(app_id, pod_id, *, remote, **kwargs):
     if remote:
-        f = remote_pod_lifecycle_folder(app_id=app_id, pod_id = pod_id)
+        f = remote_pod_lifecycle_folder(app_id=app_id, pod_id = pod_id, **kwargs)
     else:
-        f = Path(pod_folder(app_id, pod_id, remote=False) / 'lifecycle_nodes')
+        f = Path(pod_folder(app_id, pod_id, remote=False, **kwargs) / 'lifecycle_nodes')
         f.mkdir(parents=True, exist_ok=True)
     return  f
 
-def remote_dot_file(pod_id, app_id):
-    return f'{remote_probe_server(pod_id)}/{app_id}/{pod_id}/{pod_id}.dot'
+def remote_dot_file(app_id, pod_id, **kwargs):
+    return f'{remote_probe_server(pod_id, **kwargs)}/{app_id}/{pod_id}/{pod_id}.dot'
 
-def dot_file_path(app_id, pod_id, *, remote):
+def dot_file_path(app_id, pod_id, *, remote, **kwargs):
     if remote:
-        f = remote_dot_file(app_id=app_id, pod_id = pod_id)
+        f = remote_dot_file(app_id=app_id, pod_id = pod_id, **kwargs)
     else:
-        f = Path(pod_folder(app_id, pod_id, remote=False) /f'{pod_id}.dot')
+        f = Path(pod_folder(app_id, pod_id, remote=False, **kwargs) /f'{pod_id}.dot')
     return f
 
 def get_debug_pod_name(node_name):
     return f"{DebugPodPrefix}{re.sub('[^a-zA-Z-]+', '-', node_name)}"
 
-def update_rosmodels(app_id, pod_id, logger = None):
+def update_rosmodels(app_id, pod_id, **kwargs):
     path = pod_node_folder(app_id, pod_id, remote=False)
     p = Path(path).glob('**/*.json')
+    logger = kwargs.get('logger')
     files = [x for x in p if x.is_file()]
-    print(files)
     try:
         for f in files:
             node = Node.parse_file(str(Path(f).resolve()))
             yield node
     except FileNotFoundError as e:
-        if logger is not None:
-            logger.error(e)
-        else:
-            return False
+        logger.error(e) if logger else print(e)
 
-def update_lifecycle_models(app_id, pod_id, logger = None):
+def update_lifecycle_models(app_id, pod_id, **kwargs):
     path = pod_lifecycle_folder(app_id, pod_id, remote=False)
     p = Path(path).glob('**/*.json')
+    logger = kwargs.get('logger')
     files = [x for x in p if x.is_file()]
     try:
         for f in files:
             node = LifeCycleNode.parse_file(str(Path(f).resolve()))
             yield node
     except FileNotFoundError as e:
-        if logger is not None:
-            logger.error(e)
-        else:
-            return False
+        logger.error(e) if logger else print(e)

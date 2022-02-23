@@ -104,9 +104,9 @@ async def start_debug(msg):
     pod_id = PodInfo.pod_id
     debug_list = m.nodes
     # update PodModel
-    for node_model in update_rosmodels(app_id, pod_id, logging):
+    for node_model in update_rosmodels(app_id, pod_id, logger=logging):
         PodModel.add_node(node_model)
-    for node_model in update_lifecycle_models(app_id, pod_id, logging):
+    for node_model in update_lifecycle_models(app_id, pod_id, logger=logging):
         PodModel.add_lifecycle_node(node_model)
 
     if m.app_id == app_id and m.pod_id == pod_id:
