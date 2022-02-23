@@ -144,7 +144,7 @@ public:
 
     RCUTILS_LOG_INFO_NAMED(get_name(), "on_activate() is called.");
 
-    create_bond();
+    // create_bond();
     // We return a success and hence invoke the transition to the next
     // step: "active".
     // If we returned TRANSITION_CALLBACK_FAILURE instead, the state machine
@@ -174,7 +174,7 @@ public:
     pub_->on_deactivate();
 
     RCUTILS_LOG_INFO_NAMED(get_name(), "on_deactivate() is called.");
-    destroy_bond();
+    // destroy_bond();
 
     // We return a success and hence invoke the transition to the next
     // step: "inactive".
