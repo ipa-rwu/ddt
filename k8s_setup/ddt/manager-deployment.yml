@@ -21,12 +21,14 @@ spec:
       annotations:
         k8s.v1.cni.cncf.io/networks: rosmc-network
     spec:
+      serviceAccountName: ddt-manager
       containers:
       - name: ddt-manager
         image: inspiron:5000/ddt-manager:latest
         imagePullPolicy: Always
         command: ["/bin/bash", "-c"]
-        args: ["./run.sh"]
+        args: ["
+              ./run.sh"]
         env:
           - name: FLASK_ENV
             value: development

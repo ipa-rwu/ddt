@@ -9,6 +9,12 @@ COPY --from=builder /app/wheels /app/wheels
 
 ARG PKG
 RUN apt-get update
+
+RUN apt install -y curl && \
+      curl -LO https://storage.googleapis.com/kubernetes-release/release/`curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt`/bin/linux/amd64/kubectl && \
+      chmod +x ./kubectl && \
+      mv ./kubectl /usr/local/bin/kubectl
+
 RUN apt-get install -y --no-install-recommends build-essential gcc graphviz graphviz-dev wget && \
     rm -rf /var/lib/apt/lists/*
 
