@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: ddt-demo
+    role: chatter
+  name: ddt-chatter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ddt-demo
+      role: probe
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: ddt-demo
+        role: probe
+      annotations:
+        k8s.v1.cni.cncf.io/networks: rosmc-network
+    spec:
+      containers:
+      - name: ddt-manager
+        image: inspiron:5000/ddt-demo:latest
+        imagePullPolicy: Always
+        command: ["/bin/bash", "-c"]
+        args: ["
+              source /ros_entrypoint.sh && ros2 launch lifecycle_chat scenario1_no_manager.py &
+              source /ros_entrypoint.sh && ros2 lifecycle list /fnode2 &&
+              source /ros_entrypoint.sh && ros2 lifecycle list /tnode1 &&
+              source /ros_entrypoint.sh && ros2 lifecycle set /tnode1 configure &&
+              source /ros_entrypoint.sh && ros2 lifecycle set /tnode1 activate &&
+              source /ros_entrypoint.sh && ros2 lifecycle set /fnode2 configure &&
+              source /ros_entrypoint.sh && ros2 lifecycle set /fnode2 activate &&
+              source /ros_entrypoint.sh && ./run.sh
+              "
+              ]
+        env:
+          - name: POD_ID
+            value: ddt-chatter
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: DDT_FOLDER
+            value: /ddt
+          - name: DDT_PROBE_SERVER
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: DDT_PROBE_SERVER_PORT
+            value: "4000"
+          - name: APP_ID
+            value: ddt-demo
+          - name: DOMAIN_ID
+            value: "42"
+          - name: DDT_MANAGER_SERVER
+            value: ddt-manager
+          - name: DDT_MANAGER_PORT
+            value: "1234"
+          - name: NETINTERFACE
+            value: "net1"
+        ports:
+          - containerPort: 4000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ddt-chatter-service
+  labels:
+    app: ddt-demo
+    role: chatter
+spec:
+  # Start a headless service
+  # https://kubernetes.io/docs/concepts/services-networking/service/#headless-services
+  clusterIP: None
+  ports:
+    - name: server-port
+      port: 4000
+      targetPort: 4000
+      protocol: "TCP"
+  selector:
+    app: ddt-demo
+    role: chatter
