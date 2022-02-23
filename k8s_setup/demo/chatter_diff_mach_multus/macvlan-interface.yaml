@@ -10,12 +10,11 @@ spec:
       "mode": "bridge",
       "ipam": {
         "type": "host-local",
-        "subnet": "10.0.0.1/24",
+        "subnet": "10.0.0.0/24",
         "rangeStart": "10.0.0.30",
         "rangeEnd": "10.0.0.60",
         "routes": [
           { "dst": "0.0.0.0/0" }
-        ],
-        # "gateway": "10.0.0.0"
+        ]
       }
     }'
