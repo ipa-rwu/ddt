@@ -43,7 +43,7 @@ public:
     auto msg = std::make_unique<std_msgs::msg::String>();
     //msg->data = this->get_name() + std::string(": ") + std::to_string(++count);
     msg->data = this->get_name() + std::string(": Forwarding") + std::string(originalmsg->data.c_str());
-    
+
 
     // Print the current state for demo purposes
     if (!pub_->is_activated())
@@ -148,7 +148,7 @@ public:
         "lifecycle_chatter", 10,
         std::bind(&LifecycleForwarder::data_callback, this, std::placeholders::_1));
 
-    create_bond();
+    // create_bond();
     RCUTILS_LOG_INFO_NAMED(get_name(), "on_activate() is called.");
 
     // Let's sleep for 2 seconds.
@@ -193,7 +193,7 @@ public:
     RCUTILS_LOG_INFO_NAMED(get_name(), "on_deactivate() is called.");
 
     // destroy bond connection
-    destroy_bond();
+    // destroy_bond();
 
     // We return a success and hence invoke the transition to the next
     // step: "inactive".
