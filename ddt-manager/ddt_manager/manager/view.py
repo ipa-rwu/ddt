@@ -109,7 +109,7 @@ def show_graph(app_id):
 
         check_state_emit(pod, ProcessList.LifeCycleParserProcess, msg.dict(), socketio, pod.socket_id)
 
-        update_ros_graph(app_id, pod_id, app.logger)
+        update_ros_graph(app_id, pod_id, pod_ip = pod.ip, logger=app.logger)
 
     res = combine_rosgraphs(app_obj=app_model)
     return jsonify(result=res)
@@ -295,25 +295,34 @@ Register a prob per Pod
 """
 @socketio.on('register')
 def on_join(msg):
+    new_flg = False
     m = Message(**msg)
     app_id = m.app_id
     pod_id = m.pod_id
     pod_ip = m.pod_ip
     domain_id = m.domain_id
     socket_id = request.sid
-    if name_app_obj(app_id) not in globals():
-        # create a list per Room
-        globals()[name_app_room(app_id)] = list()
-        AppNames.append(app_id)
-        # create an instance of Application
-        globals()[name_app_obj(app_id)] = Application(name = app_id)
-        globals()[name_debug_nodes_list(app_id)] = list()
-        if WebID:
-            join_room(name_app_room(app_id), sid = WebID)
-        RoomWeb.append(app_id)
-        app.logger.info(f'Create a new application: {app_id}')
+    def _create_model():
+        if name_app_obj(app_id) not in globals():
+            # create a list per Room
+            globals()[name_app_room(app_id)] = list()
+            AppNames.append(app_id)
+            # create an instance of Application
+            globals()[name_app_obj(app_id)] = Application(name = app_id)
+            globals()[name_debug_nodes_list(app_id)] = list()
+            if WebID:
+                join_room(name_app_room(app_id), sid = WebID)
+            RoomWeb.append(app_id)
+            app.logger.info(f'Create a new application: {app_id}')
 
-    if not (pod_id in globals()[name_app_obj(app_id)].all_pods()):
+    _create_model()
+    if pod_id in globals()[name_app_obj(app_id)].all_pods():
+        app_model = globals()[name_app_obj(app_id)]
+        pod_model = app_model.find_pod(pod_id)
+        if pod_model.socket_id != socket_id:
+            remove_pod(app_model=app_model, pod_model=pod_model)
+            _create_model()
+    if not(pod_id in globals()[name_app_obj(app_id)].all_pods()):
         # create an instance of Pod
         def get_process():
             for name in ProcessList.list():
@@ -394,29 +403,33 @@ def on_leave(msg):
     app_id = m.app_id
     pod_id = m.pod_id
     app_model = globals()[name_app_obj(app_id)]
-    p = app_model.find_pod(pod_id)
-    leave_room(name_app_room(app_id), sid=p.socket_id)
-    leave_room(RoomWebName,  sid=p.socket_id)
-    # remove from the list of a room
-    room_list = globals()[name_app_room(app_id)]
-    room_list.remove(pod_id)
+    pod_model = app_model.find_pod(pod_id)
+    remove_pod(app_model=app_model, pod_model=pod_model)
+    room_list = globals()[name_app_room(app_model.name)]
     msg = Message()
     msg.data = f'{pod_id} from [{m.app_id}] has left the [{name_app_room(m.app_id)}], {room_list} are still in the room.'
     app.logger.info(msg.data)
-    # remove from model
-    app_model.remove_pod(p)
+    socketio.emit('show_log', msg.dict(), to = RoomWebName)
+
+def remove_pod(app_model, pod_model):
+    leave_room(name_app_room(app_model.name), sid=pod_model.socket_id)
+    leave_room(RoomWebName,  sid=pod_model.socket_id)
+
+    room_list = globals()[name_app_room(app_model.name)]
+    room_list.remove(pod_model.name)
+
+    app_model.remove_pod(pod_model)
     # remove pod folder
-    cleanup_folder(app_id, pod_id)
-    RoomWeb.remove(pod_id)
+    cleanup_folder(app_model.name, pod_model.name)
+    RoomWeb.remove(pod_model.name)
     # no pods left, remove app
     if not len(room_list):
-        cleanup_folder(app_id)
-        del globals()[name_app_obj(app_id)]
-        del globals()[name_app_room(app_id)]
-        del globals()[name_debug_nodes_list(app_id)]
-        RoomWeb.remove(app_id)
-        AppNames.remove(app_id)
-    socketio.emit('show_log', msg.dict(), to = RoomWebName)
+        cleanup_folder(app_model.name)
+        del globals()[name_app_obj(app_model.name)]
+        del globals()[name_app_room(app_model.name)]
+        del globals()[name_debug_nodes_list(app_model.name)]
+        RoomWeb.remove(app_model.name)
+        AppNames.remove(app_model.name)
 
 # if __name__=="__main__":
 
