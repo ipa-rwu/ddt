@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: chatter-galactic-listener
-        image: rachelwu/chatterpy:galactic
+        image: inspiron:5000/chatterpy:galactic
         args:
           - "ros2"
           - "launch"
@@ -39,8 +39,8 @@ spec:
                   fieldPath: status.podIP
         ports:
             - containerPort: 8000
-      nodeSelector:
-            machine: nuc8
+      # nodeSelector:
+      #       machine: nuc8
 ---
 apiVersion: v1
 kind: Service
