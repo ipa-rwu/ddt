@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from typing import List
 from typing import Optional
-from enum import Enum, IntEnum
+from enum import Enum, IntEnum, auto
 import logging
 
 class NodeName(BaseModel):
@@ -12,6 +12,14 @@ class NodeName(BaseModel):
 class Interface(BaseModel):
     name: str
     types: List[str]
+
+class InterfaceType(IntEnum):
+    Publisher       = auto()
+    Subscriber      = auto()
+    ActionServer    = auto()
+    ActionClient    = auto()
+    ServiceServer   = auto()
+    ServiceClient   = auto()
 
 class Node(BaseModel):
     nodename:        NodeName
