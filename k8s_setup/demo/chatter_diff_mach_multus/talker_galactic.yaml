@@ -41,8 +41,8 @@ spec:
                   fieldPath: status.podIP
         ports:
             - containerPort: 8000
-      nodeSelector:
-            machine: samsung
+      # nodeSelector:
+      #       machine: samsung
 ---
 apiVersion: v1
 kind: Service

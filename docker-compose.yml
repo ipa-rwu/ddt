@@ -26,7 +26,7 @@ services:
       - APP_ID=chatter-test
       - POD_ID=ddt-probe-1
       - POD_IP=ddt-probe-1
-      - DOMAIN_ID=42
+      - ROS_DOMAIN_ID=42
       - DDT_MANAGER_SERVER=ddt-manager
       - DDT_MANAGER_PORT=1234
     networks:
