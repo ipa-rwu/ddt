@@ -1,4 +1,6 @@
+from multiprocessing import process
 from pathlib import Path
+from pprint import pprint
 from ddt_utils.actions import start_command
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
 from flask import flash
@@ -12,14 +14,16 @@ import re
 from ddt_utils.model import Message
 from ddt_utils.model import Pod
 from ddt_utils.model import Process
+from ddt_utils.model import DebugElement
 
 from ddt_utils.utils import ProcessList
+from ddt_utils.utils import debug_pod_name
 from ddt_utils.utils import SocketActionList
 from ddt_utils.utils import TmpFolder
 from ddt_utils.utils import DebugPodPrefix
 from ddt_utils.utils import ShowRosGraphProcesses
 
-from ddt_manager.utils import ALLOWED_EXTENSIONS, AppNames, RoomWebName, RoomWeb, WebID
+from ddt_manager.utils import ALLOWED_EXTENSIONS, AppNames, DefaultInterface, RoomWebName, RoomWeb, WebID, rename_to_new_debug_pod
 from ddt_manager.utils import name_debug_nodes_list
 from ddt_manager.utils import get_app_rosgraph_path
 from ddt_manager.utils import name_app_obj
@@ -30,14 +34,14 @@ from ddt_manager.utils import cleanup_folder
 from ddt_manager.utils import get_log_path
 from ddt_manager.utils import debug_deployment_folder
 
-from ddt_manager.manager.action import update_ros_graph
+from ddt_manager.manager.action import deploy_debug_node, update_ros_graph
 from ddt_manager.manager.action import combine_rosgraphs
 from ddt_manager.manager.action import show_svg
 from ddt_manager.manager.action import check_state_emit
 from ddt_manager.manager.action import set_processes_group
 from ddt_manager.manager.action import update_app_model
 
-from ddt_manager.model import Application, DebugElement
+from ddt_manager.model import Application
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret'
@@ -103,11 +107,11 @@ def show_graph(app_id):
         msg.app_id = app_id
         msg.pod_id = pod_id
 
-        check_state_emit(pod, ProcessList.RosGraphProcess, msg.dict(), socketio, pod.socket_id)
+        check_state_emit(pod, ProcessList.RosGraphProcess, msg.dict(), socketio, name_app_room(app_id))
 
-        check_state_emit(pod, ProcessList.NodeParserProcess, msg.dict(), socketio, pod.socket_id)
+        check_state_emit(pod, ProcessList.NodeParserProcess, msg.dict(), socketio, name_app_room(app_id))
 
-        check_state_emit(pod, ProcessList.LifeCycleParserProcess, msg.dict(), socketio, pod.socket_id)
+        check_state_emit(pod, ProcessList.LifeCycleParserProcess, msg.dict(), socketio, name_app_room(app_id))
 
         update_ros_graph(app_id, pod_id, pod_ip = pod.ip, logger=app.logger)
 
@@ -122,8 +126,8 @@ def stop_process(app_id):
         socketio.emit(SocketActionList.PauseGraph.value, msg.dict(), to = pod.socket_id) #to = name_app_room(app_id)
         processes = [{"name" : p, "pid" : None} for p in ShowRosGraphProcesses]
         set_processes_group(pod, processes, app.logger, stop=True)
-    app.logger.info(f'show_graph: Application {app_id} status: ')
-    app.logger.info(globals()[name_app_obj(app_id)].dict())
+    # app.logger.info(f'show_graph: Application {app_id} status: ')
+    # app.logger.info(globals()[name_app_obj(app_id)].dict())
 
 @app.route('/app_<string:app_id>/pause_graph')
 def pause_graph(app_id):
@@ -191,27 +195,30 @@ handle debug list
 @app.route('/app_<string:app_id>/debug', methods=['GET','POST'])
 def handle_debug(app_id):
     app_model = globals()[name_app_obj(app_id)]
+    debug_list = globals()[name_debug_nodes_list(app_id)]
     if request.method == 'POST':
         # update_app_model(app_model, logger=app.logger)
-        pod_nodes = dict()
+        # all_pods_nodes = dict()
+        app_model.debug_infocenter = list()
         for l in get_list(('debug_pod', 'debug_node')):
             debug_node_name = l['debug_node']
-            debug_pod_name = l['debug_pod']
-            if not debug_pod_name in pod_nodes.keys():
-                pod_nodes[debug_pod_name] = list()
-            if not debug_node_name in pod_nodes[debug_pod_name]:
-                pod_nodes[debug_pod_name].append(debug_node_name)
-            ele = DebugElement(node=debug_node_name, pod=debug_pod_name)
-            app_model.debug.append(ele)
-        for pod_id in pod_nodes.keys():
+            request_debug_pod_name = l['debug_pod']
+            app_model.update_debug_model(pod_id = request_debug_pod_name, node_id=debug_node_name, ignore_interfaces=DefaultInterface, logger=app.logger)
+            node_model =  app_model.get_debug_node_info(request_debug_pod_name, debug_node_name)
+            if node_model:
+                rename_to_new_debug_pod(app_name=app_id, debug_node_model=node_model, debug_list=debug_list)
+
+            app.logger.info(f'Debug infocenter for Application [{app_id}]: {app_model.debug_infocenter}')
+
+        for pod_id in [debug_pod.name for debug_pod in app_model.debug_infocenter]:
+            debug_pod_model =  app_model.get_debug_pod_info(pod_id)
             pod_model = app_model.find_pod(pod_id)
             msg = Message()
-            msg.nodes = pod_nodes[pod_id]
+            msg.nodes = debug_pod_model.dict()
             msg.app_id = app_id
             msg.pod_id = pod_id
             socketio.emit(SocketActionList.Debug.value, msg.dict(), to = pod_model.socket_id)
         app.logger.info(f'Request debugging in Application {app_id}: ')
-        app.logger.info(globals()[name_app_obj(app_id)].debug)
     return redirect(url_for('app_page', app_id=app_id))
 
 def allowed_file(filename):
@@ -247,11 +254,19 @@ def delete_deployments(app_id):
         Path(debug_deployment_folder(app_id=app_id)/filename).unlink()
         return redirect(url_for('app_page', app_id=app_id))
 
+
 @app.route('/app_<string:app_id>/comfirm_upload', methods=['GET', 'POST'])
 def comfirm_upload(app_id):
+    app_model = globals()[name_app_obj(app_id)]
+
     if request.method == 'POST':
-        debug_deployment_files = get_list(["file"])
-        app.logger.info(f'Get deployment files for debug target nodes: {debug_deployment_files}')
+        info = get_list(["file"])
+        app.logger.info(f'Get deployment files for debug target nodes: {info}')
+        deploy_file_names = [l["file"] for l in info]
+        deploy_file_path = [Path(debug_deployment_folder(app_id=app_id)) / file for file in deploy_file_names]
+        # Todo: Autogen deploymebt file
+        for file in deploy_file_path:
+            res = deploy_debug_node(file)
         return redirect(url_for('app_page', app_id=app_id))
 
 def monitor_applist_thread():
@@ -283,7 +298,7 @@ def register_web(msg):
     global WebID
     WebID = request.sid
     join_room(RoomWebName, sid = WebID)
-    RoomWeb.append('web')
+    RoomWeb.add('web')
     msg = Message()
     msg.data = f"Welcome [Web Interface] ({WebID}) join {get_rooms(WebID)}."
     session['receive_count'] = session.get('receive_count', 0) + 1
@@ -295,7 +310,6 @@ Register a prob per Pod
 """
 @socketio.on('register')
 def on_join(msg):
-    new_flg = False
     m = Message(**msg)
     app_id = m.app_id
     pod_id = m.pod_id
@@ -305,15 +319,15 @@ def on_join(msg):
     def _create_model():
         if name_app_obj(app_id) not in globals():
             # create a list per Room
-            globals()[name_app_room(app_id)] = list()
+            globals()[name_app_room(app_id)] = set()
             AppNames.append(app_id)
             # create an instance of Application
             globals()[name_app_obj(app_id)] = Application(name = app_id)
             globals()[name_debug_nodes_list(app_id)] = list()
             if WebID:
                 join_room(name_app_room(app_id), sid = WebID)
-            RoomWeb.append(app_id)
-            app.logger.info(f'Create a new application: {app_id}')
+            RoomWeb.add(app_id)
+            # app.logger.info(f'Create a new application: {app_id}')
 
     _create_model()
     if pod_id in globals()[name_app_obj(app_id)].all_pods():
@@ -322,18 +336,26 @@ def on_join(msg):
         if pod_model.socket_id != socket_id:
             remove_pod(app_model=app_model, pod_model=pod_model)
             _create_model()
+
     if not(pod_id in globals()[name_app_obj(app_id)].all_pods()):
         # create an instance of Pod
         def get_process():
             for name in ProcessList.list():
                 yield Process(name=name)
+
         new_pod = Pod(name = pod_id,
                     ip = pod_ip,
                     domain_id = int(domain_id) ,
                     socket_id = socket_id,
                     processes = list(get_process()))
-        app.logger.info(f'new pod is: ')
-        app.logger.info(new_pod.dict())
+        # app.logger.info(f'new pod is: ')
+        # app.logger.info(new_pod.dict())
+        if re.match(DebugPodPrefix, pod_id):
+            globals()[name_app_obj(app_id)].add_debug_pod(Pod(name = pod_id,
+                                                        ip = pod_ip,
+                                                        domain_id = int(domain_id) ,
+                                                        socket_id = socket_id,
+                                                        processes = list(get_process())))
         globals()[name_app_obj(app_id)].add_pod(Pod(name = pod_id,
                                                     ip = pod_ip,
                                                     domain_id = int(domain_id) ,
@@ -343,17 +365,31 @@ def on_join(msg):
         join_room(name_app_room(app_id), sid = socket_id)
         # app join Room_web
         join_room(RoomWebName, sid = socket_id)
-        globals()[name_app_room(app_id)].append(pod_id)
-        RoomWeb.append(pod_id)
+        globals()[name_app_room(app_id)].add(pod_id)
+        RoomWeb.add(pod_id)
         msg = Message()
-        msg.data = f'Welcome [{pod_id}] ({request.sid}) join {get_rooms(socket_id)}, {globals()[name_app_room(app_id)]} are in the {name_app_room(app_id)}'
+        msg.data = f'Welcome [{pod_id}] ({request.sid}) join {get_rooms(socket_id)}, \
+                    {globals()[name_app_room(app_id)]} are in the [{name_app_room(app_id)}]'
         app.logger.info(msg.data)
         msg.count = session['receive_count']
         session['receive_count'] = session.get('receive_count', 0) + 1
         socketio.emit('show_log', msg.dict(), to = RoomWebName)
 
     if re.match(DebugPodPrefix, pod_id):
-        socketio.emit(ProcessList.DebugBridgeProcess.value, msg.dict(), to = socket_id)
+        app.logger.info(f'Debug pod [{pod_id}] start')
+        if name_app_obj(app_id) in globals():
+            app_model = globals()[name_app_obj(app_id)]
+            for debug_pod in app_model.debug_infocenter:
+                ori_pod_id = debug_pod.name
+                for ori_node_id in debug_pod.nodes:
+                    if pod_id == debug_pod_name(app_name=app_id, node_name=ori_node_id.name):
+                        app.logger.info(f'Debug pod [{pod_id}] Node [{ori_node_id.name}] for start')
+                        msg = Message()
+                        msg.info = ori_node_id.dict()
+                        msg.app_id = app_id
+                        msg.pod_id = pod_id
+                        app.logger.info(msg.dict())
+                        socketio.emit(ProcessList.DebugBridgeProcess.value, msg.dict(), to = socket_id)
 
 # muti processes
 @socketio.on(f'started_{ProcessList.LifeCycleParserProcess.value}')
@@ -380,13 +416,24 @@ def started_rosmodel_parser(msg):
     p = globals()[name_app_obj(app_id)].find_pod(pod_id)
     set_processes_group(p, m.processes, app.logger, start=True)
 
+@socketio.on(f'started_{SocketActionList.Debug.value}')
+def started_rosmodel_parser(msg):
+    m = Message(**msg)
+    app_id = m.app_id
+    pod_id = m.pod_id
+    p = globals()[name_app_obj(app_id)].find_pod(pod_id)
+    set_processes_group(p, m.processes, app.logger, start=True)
+
 @socketio.on(f'started_{ProcessList.DebugBridgeProcess.value}')
 def started_ori_bridge(msg):
     m = Message(**msg)
     app_id = m.app_id
     pod_id = m.pod_id
     p = globals()[name_app_obj(app_id)].find_pod(pod_id)
-    set_processes_group(p, m.processes, app.logger, start=True)
+    if p:
+        set_processes_group(p, m.processes, app.logger, start=True)
+    else:
+        app.logger.error(f"Can't find POD [{pod_id}] from Application [{app_id}]")
     # deploy debug pod
     debug_list = globals()[name_debug_nodes_list(app_id)]
     # for debug_node in debug_list:

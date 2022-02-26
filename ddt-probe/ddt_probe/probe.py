@@ -4,8 +4,9 @@ from importlib.resources import path
 import socketio
 import logging
 from pathlib import Path
+import time
 
-from ddt_utils.model import Message
+from ddt_utils.model import DebugPodInfo, Message
 from ddt_utils.model import Pod
 from ddt_utils.model import Process
 
@@ -19,14 +20,13 @@ from ddt_utils.actions import set_process_state
 
 from ros2_model import LifeCycleActionsEnum
 
-from ddt_probe.action import backup_to_finial, get_ros_model
+from ddt_probe.action import backup_to_finial, collect_info_for_bridge, collect_info_for_debug_pod_bridge, get_related_nodes, get_ros_model
 from ddt_probe.action import stop_command
 from ddt_probe.action import get_ros_graph
 from ddt_probe.action import get_lifecycle_nodes
 from ddt_probe.action import update_nodes
 from ddt_probe.action import update_lifecycle_nodes
 from ddt_probe.action import start_zenoh_process
-from ddt_probe.action import decide_bridge_collect_debug_topics
 
 from ddt_probe.action import kill_node
 
@@ -103,39 +103,49 @@ async def start_debug(msg):
     app_id = PodInfo.app_id
     pod_id = PodInfo.pod_id
     debug_list = m.nodes
-    # update PodModel
+    debug_pod_info = DebugPodInfo.parse_obj(debug_list)
     for node_model in update_rosmodels(app_id, pod_id, logger=logging):
         PodModel.add_node(node_model)
     for node_model in update_lifecycle_models(app_id, pod_id, logger=logging):
         PodModel.add_lifecycle_node(node_model)
 
     if m.app_id == app_id and m.pod_id == pod_id:
-        allow_topics, dst_names= decide_bridge_collect_debug_topics(debug_list, PodModel)
-        logging.info(f'Start debug procedure! Lisen on: [{PodInfo.listen_server}:{PodInfo.listen_port}], Allow topics: {allow_topics}, Peers: {dst_names}]')
+        allow_topics, dst_names= collect_info_for_bridge(app_id=app_id , debug_list=debug_list, PodModel=PodModel)
+        print(allow_topics, dst_names)
+        logging.info(f'Start debug procedure! Lisen on: [{PodInfo.listen_server}:{PodInfo.listen_port}], \
+                        Allow topics: {allow_topics}, \
+                        Destinations: {dst_names}]')
         dsts = [ f'{name}:{PodInfo.dst_port}' for name in dst_names]
         # start bridge
-        processes = start_zenoh_process(debug=PodInfo.debug,
+        processes_pid = start_zenoh_process(debug=PodInfo.debug,
                                         domain_id=PodInfo.domain_id,
-                                        allow_topics=allow_topics,
+                                        allow_topics=list(allow_topics),
                                         dsts = dsts,
                                         listen_server=PodInfo.listen_server,
                                         listen_port=PodInfo.listen_port)
-        pss = [dict(zip(("name", "pid"), (name, proc.pid))) for name, proc in processes]
+        global BridgeCounter
+        pss = [dict(zip(("name", "pid"), (f'{ProcessList.DebugBridgeProcess.name}_{BridgeCounter}', processes_pid.pid)))]
+        pss = [dict( name = f'{ProcessList.DebugBridgeProcess.name}_{BridgeCounter}',
+                    pid =  processes_pid.pid)]
+        BridgeCounter +=1
+        logging.info(f'In {SocketActionList.Debug.value} strat: {pss}')
+
         for ps in pss:
             update_process_in_model(PodModel, ps)
             set_process_state(PodModel, name=ps['name'], pid=ps['pid'], logger=logging, start=True)
         new_msg = msg_start_process(app_id, pod_id, pss)
-        # await sio.emit(f'started_{ProcessList.DebugBridgeProcess.value}', new_msg.dict())
+        await sio.emit(f'started_{SocketActionList.Debug.value}', new_msg.dict())
         # get all topics of this node -- add to allowded topic
 
         # find realted nodes per topic in same pod
             # if publisher, need to start a bridge with dst (pod service)
             # if subscriber, need to lisen on
         # debug nodw samw
-    for name in debug_list:
+    for name in [node.name for node in debug_pod_info.nodes]:
         if name in PodModel.node_list:
             if name in PodModel.lifecycle_node_list:
                 life_model = PodModel.find_lifecycle_node(name)
+                # Deactivate node
                 res = set_lifecycle_state(name, LifeCycleActionsEnum.Deactivate.value)
                 if res:
                     logging.info(f'Deactivate Lifecycle Node[{name}] successfully')
@@ -148,9 +158,61 @@ async def start_debug(msg):
                 except:
                     NotImplemented
 
+def event_minute_later(event):
+    print(time.time()) # use for testing, comment out or delete for production
+    return event + 60 < time.time()
+
+# when debug pod up
 @sio.on(ProcessList.DebugBridgeProcess.value)
 async def start_debug_pod_bridge(msg):
-    NotImplemented
+    m = Message(**msg)
+    app_id = PodInfo.app_id
+    pod_id = PodInfo.pod_id
+    debug_node_info = m.info
+    logging.info(f'Zenoh bridge will start in Debug Pod [{pod_id}] for Application [{app_id}]')
+    logging.info(f'Get debug infomation: {debug_node_info}')
+
+    # create node model into file
+    processes = get_lifecycle_nodes(app_id, pod_id)
+    pss = [dict(zip(("name", "pid"), (name, proc.pid))) for name, proc in processes]
+    for ps in pss:
+        update_process_in_model(PodModel, ps)
+        set_process_state(PodModel, name=ps['name'], pid=ps['pid'], logger=logging, start=True)
+
+    processes = get_ros_model(app_id, pod_id)
+    pss = [dict(zip(("name", "pid"), (name, proc.pid))) for name, proc in processes]
+    for ps in pss:
+        update_process_in_model(PodModel, ps)
+        set_process_state(PodModel, name=ps['name'], pid=ps['pid'], logger=logging, start=True)
+
+    await asyncio.sleep(10)
+
+    for ps in PodModel.processes:
+        stop_command(ps.pid, logger=logging)
+        set_process_state(PodModel, name=ps.name, logger=logging, stop=True)
+
+    allow_topics, dst_names= collect_info_for_debug_pod_bridge(app_id= app_id, debug_node=debug_node_info)
+
+    logging.info(f'Start debug procedure from Debug Node! Lisen on: \
+            [{PodInfo.listen_server}:{PodInfo.listen_port}], \
+            Allow topics: {allow_topics}, Peers: {dst_names}]')
+    dsts = [ f'{name}:{PodInfo.dst_port}' for name in dst_names]
+    # start bridge
+    processes_pid = start_zenoh_process(debug=PodInfo.debug,
+                                    domain_id=PodInfo.domain_id,
+                                    allow_topics=list(allow_topics),
+                                    dsts = dsts,
+                                    listen_server=PodInfo.listen_server,
+                                    listen_port=PodInfo.listen_port)
+    global BridgeCounter
+    pss = [dict(zip(("name", "pid"), (f'{ProcessList.DebugBridgeProcess.name}_{BridgeCounter}', processes_pid.pid)))]
+    BridgeCounter +=1
+
+    for ps in pss:
+        update_process_in_model(PodModel, ps)
+        set_process_state(PodModel, name=ps['name'], pid=ps['pid'], logger=logging, start=True)
+    new_msg = msg_start_process(app_id, pod_id, pss)
+    await sio.emit(f'started_{ProcessList.DebugBridgeProcess.value}', new_msg.dict())
 
 @sio.on(SocketActionList.PauseGraph.value)
 async def pause_graph(msg):
@@ -187,6 +249,8 @@ async def register():
                     domain_id = PodInfo.domain_id,
                     socket_id=sio.sid,
                     process=list())
+    global BridgeCounter
+    BridgeCounter = 0
     await sio.emit('register', msg.dict())
 
 @sio.event

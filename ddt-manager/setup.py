@@ -21,7 +21,9 @@ setuptools.setup(
         'Click',
         # fix svf-stcak
         'six',
-        'lxml',],
+        'lxml',
+        'pyyaml',
+        'kubernetes'],
     entry_points = {
     },
 )

@@ -22,36 +22,26 @@ def set_process_state(pod: Pod, *, name, **kwargs):
     p = pod.find_process(name)
     flag_start = kwargs.get('start', False)
     flag_stop = kwargs.get('stop', False)
+    logger = kwargs.get('logger')
     msg = f'Set Process [{name}] state from [{"start" if p.state else "stop"}] to [{"start" if flag_start else "stop"}]'
-    try:
-        kwargs['logger'].info(msg)
-    except KeyError:
-        print(msg)
+    logger.info(msg) if logger else print(msg)
     if p.state is False and flag_start:
         try:
             pid = kwargs['pid']
             p.start(pid=pid)
             msg = f'Start Proceess[name: {name}, pid: {pid}]'
-            try:
-                kwargs['logger'].info(msg)
-            except KeyError:
-                print(msg)
+            logger.info(msg) if logger else print(msg)
         except KeyError:
             msg = f"Didn't find pid of Proceess[name: {name}], can't set state to start"
-            try:
-                kwargs['logger'].error(msg)
-            except KeyError:
-                print(msg)
+            logger.info(msg) if logger else print(msg)
     if p.state and flag_stop:
         msg = f'Stop Proceess[name: {name}, pid: {[p.pid]}]'
         p.stop()
-        try:
-            kwargs['logger'].info(msg)
-        except KeyError:
-            print(msg)
+        logger.info(msg) if logger else print(msg)
 
-def start_command(command):
-    print("Start command: ", command)
+def start_command(command, **kwargs):
+    logger = kwargs.get('logger')
+    msg = f'Start command: {command}'
     c = split(command)
     pid = subprocess.Popen(c)
     return pid
@@ -82,12 +72,6 @@ def stop_command(pid, **kwargs):
                         print(msg)
             except psutil.NoSuchProcess:
                 pass
-            # *_, result = check_pid_running(pid)
-            # while result:
-            #     current_time = time.time()
-            #     if current_time - check_time> 60:
-            #         msg, check_time, result = check_pid_running(pid)
-            # os.kill(pid, signal.SIGINT)
 
         else:
             pid.send_signal(subprocess.signal.SIGTERM)
