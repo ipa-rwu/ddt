@@ -3,23 +3,29 @@ from pathlib import Path
 from flask_socketio import rooms
 from shutil import rmtree
 from flask import request
+import datetime
+
+import re
 from ddt_utils.utils import app_folder
+from ddt_utils.utils import debug_pod_name
 from ddt_utils.utils import pod_folder
 from ddt_utils.utils import TmpFolder
 from ddt_utils.utils import DebugPodPrefix
+from ddt_utils.model import DebugElement
 
-import datetime
 
 AppNames = list()
 Apps = list()
 # public room
-RoomWeb = list()
+RoomWeb = set()
 RoomWebName = 'Room-Web'
 WebID = None
 ALLOWED_EXTENSIONS = {'yaml', 'yml'}
 
 class DDTManagerProcess(IntEnum):
     K8sDeployPod = auto()
+
+DefaultInterface = ["/rosout", "/parameter_events"]
 
 def get_log_path():
     timestampStr = datetime.datetime.now().strftime("%d-%b-%Y-%H-%M")
@@ -70,3 +76,12 @@ def get_list(headers):
         for _x,_i in enumerate(i):
             items[_x][headers[x]] = _i
     return items
+
+def rename_to_new_debug_pod(app_name, debug_node_model, debug_list):
+    for info in debug_node_model.interface_info:
+        for ele in info.destinations + info.sources:
+            if DebugElement.parse_obj(ele) in debug_list:
+                ele.pod = debug_pod_name(app_name=app_name, node_name=ele.node)
+
+def remove_prefix(text, prefix):
+    return re.sub(r'^{0}'.format(re.escape(prefix)), '', text)

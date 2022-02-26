@@ -9,7 +9,7 @@ from ddt_utils.model import Node, LifeCycleNode
 TmpFolder= Path(os.getenv("DDT_FOLDER", Path.home() / 'tmp'))
 PodServerPort = os.getenv("DDT_PROBE_SERVER_PORT", 4000)
 
-DebugPodPrefix = f'DDT-debug-'
+DebugPodPrefix = f'ddt-debug'
 
 class _ExtendedEnum(Enum):
     @classmethod
@@ -19,7 +19,6 @@ class _ExtendedEnum(Enum):
 class ProcessList(_ExtendedEnum):
     RosGraphProcess =  'show_graph'
     DebugBridgeProcess = "set_debug_bridge"
-    GraphBridgeProcess = 'set_graph_bridge'
     NodeParserProcess = 'get_node_models'
     LifeCycleParserProcess = 'get_lifecycle_node_models'
 
@@ -33,6 +32,7 @@ ShowRosGraphProcesses = [ProcessList.RosGraphProcess.name, ProcessList.LifeCycle
 class SocketActionList(_ExtendedEnum):
     Debug = "start_debug"
     PauseGraph = 'pause_graph'
+    ConfirmDebug = "confirm_debug"
 
 def getIP(d):
     """
@@ -132,8 +132,8 @@ def dot_file_path(app_id, pod_id, *, remote, **kwargs):
         f = Path(pod_folder(app_id, pod_id, remote=False, **kwargs) /f'{pod_id}.dot')
     return f
 
-def get_debug_pod_name(node_name):
-    return f"{DebugPodPrefix}{re.sub('[^a-zA-Z-]+', '-', node_name)}"
+def debug_pod_name(app_name, node_name):
+    return f"{DebugPodPrefix}-{app_name}{re.sub('[^0-9a-zA-Z]', '-', node_name)}"
 
 def update_rosmodels(app_id, pod_id, **kwargs):
     path = pod_node_folder(app_id, pod_id, remote=False)
