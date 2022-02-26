@@ -1,10 +1,12 @@
 from shutil import rmtree
+from ddt_utils.model import Process
 import pygraphviz as pgv
 from pathlib import Path
 import svg_stack as ss
 import svgwrite
 from flask import Markup
-import time
+import yaml
+from kubernetes import client, config
 
 from ddt_utils.utils import pod_node_folder
 from ddt_utils.utils import pod_folder
@@ -13,20 +15,14 @@ from ddt_utils.utils import dot_file_path
 
 from ddt_utils.actions import set_process_state
 from ddt_utils.actions import start_command
-from ddt_utils.actions import stop_command
 from ddt_utils.actions import call_command
 
 from ddt_utils.utils import update_lifecycle_models
 from ddt_utils.utils import update_rosmodels
 
-from ros2_model import Node, LifeCycleNode
-
 from ddt_manager.utils import get_app_rosgraph_path
 from ddt_manager.utils import get_pod_domain_svg
 from ddt_manager.utils import get_pod_rosgraph_path
-from ddt_manager.utils import name_app_obj
-from ddt_manager.utils import DDTManagerProcess
-from ddt_manager.utils import debug_deployment_file
 
 def create_url(prefix, name):
     url = f'/{prefix}{name}/add'
@@ -139,24 +135,29 @@ def update_ros_graph(app, pod_id, pod_ip, **kwargs):
     print(f'ip: {kwargs.get("pod_ip")}')
     return _rewrite_dot(app_pid=app, pod_id=pod_id, prefix = f'app_{app}/{pod_id}/__', pod_ip= pod_ip, **kwargs)
 
-def check_state_emit(pod, process, msg, socketio, socket_id):
+def check_state_emit(pod, process, msg, socketio, dest):
     process_in_pod = pod.find_process(process.name)
     if not process_in_pod.state:
-        socketio.emit(process.value, msg, to = socket_id)
+        socketio.emit(process.value, msg, to = dest)
 
-def set_processes_group(pod, processes, logger, **kwargs):
+def set_processes_group(pod_model, processes, logger, **kwargs):
     for process in processes:
-        set_process_state(pod, name = process['name'], pid=process['pid'], logger = logger, **kwargs)
+        if process['name'] not in (process.name for process in pod_model.processes):
+            pod_model.processes.append(Process(name=process['name']))
+        set_process_state(pod_model, name = process['name'], pid=process['pid'], logger = logger, **kwargs)
 
-def deploy_pod(app_id, node_id, **kwargs):
-    logger = kwargs['logger']
-    deployment_file = debug_deployment_file(app_id=app_id, node=node_id)
-    if deployment_file.is_file():
-        pid = start_command(f"kubectl apply -f {deployment_file}")
-        return True
-    elif logger:
-        msg = f'Deployment file [{deployment_file}] is not found. Please upload it'
-        logger.error(msg)
+def deploy_debug_node(file, **kwargs):
+    logger = kwargs.get('logger')
+    config.load_incluster_config()
+    if file.is_file():
+        with open(file) as f:
+            dep = yaml.safe_load(f)
+            k8s_apps_v1 = client.AppsV1Api()
+            resp = k8s_apps_v1.create_namespaced_deployment(body=dep, namespace="default")
+            msg = f"Deployment created. status='{resp.metadata.name}'"
+            logger.info(msg) if logger else print(msg)
+            return resp
     else:
-        print(msg)
-    return False
+        msg = f'File [{file}] is not existed'
+        logger.info(msg) if logger else print(msg)
+        return False

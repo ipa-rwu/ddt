@@ -4,8 +4,10 @@ from ddt_utils.utils import pod_lifecycle_folder
 from ddt_utils.utils import update_lifecycle_models
 from ddt_utils.utils import update_rosmodels
 from ddt_utils.utils import BridgeMode
-from ddt_utils.utils import get_debug_pod_name
+from ddt_utils.utils import debug_pod_name
 from ddt_utils.utils import dot_file_path
+
+from ddt_utils.model import DebugNodeInfo, DebugPodInfo
 
 from ddt_utils.actions import get_bridge_mode
 from ddt_utils.actions import start_command
@@ -33,7 +35,7 @@ def start_zenoh(**kwargs):
         common = f'/root/zenoh-bridge-dds -d $ROS_DOMAIN_ID '
     debug=''
     if 'debug' in kwargs and kwargs["debug"] is not None:
-        debug = f'RUST_LOG={kwargs["debug"].upper() }'
+        debug = f'RUST_LOG={kwargs["debug"].upper()} '
 
     peer = ''
     if 'dsts' in kwargs:
@@ -94,15 +96,17 @@ def update_lifecycle_nodes(app_id, pod_id, pod):
     for node in update_lifecycle_models(app_id, pod_id):
         pod.add_lifecycle_node(node)
 
-def do(node_model):
+def get_related_nodes(node_model):
+    # publish to, need dest
     for topic in node_model.publishers:
         # get subscribers of topic
         target_node_list = get_connection_info(topic).reception
-        yield 'sub',  topic, target_node_list
+        yield 'pub',  topic, target_node_list
+    # listen on
     for topic in node_model.subscribers:
         # get oublishers of topic
         target_node_list = get_connection_info(topic).emission
-        yield 'pub',  topic, target_node_list
+        yield 'sub',  topic, target_node_list
 
 def get_debugged_pod_name(node_name):
     return f'debug_{node_name}'
@@ -139,45 +143,39 @@ def start_zenoh_process(allow_topics, **kwargs):
                         dsts = kwargs['dsts'],
                         listen_server=ls,
                         listen_port=lp)
-    yield ProcessList.DebugBridgeProcess.name, pid
+    return pid
 
-def decide_bridge_collect_debug_topics(debug_list, PodModel):
-    flag = False
-    bridge = BridgeMode.NoNeed
-    def _combine_lists(a, b):
-        return (a + list(set(b) - set(a)))
-    def _topics(node_model):
-        pub_topics = [interface.name for interface in node_model.publishers]
-        sub_topics = [interface.name for interface in node_model.subscribers]
-        return _combine_lists(pub_topics, sub_topics)
+def collect_info_for_bridge(app_id, debug_list, PodModel):
+    dest_list = set() # -e
+    allow_topics = set() # -a
+    pod_info = DebugPodInfo.parse_obj(debug_list)
+    for node in pod_info.nodes:
+        for inter in node.interface_info:
+            print(inter.sources)
+            if inter.sources:
+                for source in inter.sources:
+                    if source.pod == PodModel.name:
+                        dest_list.add(debug_pod_name(app_name= app_id, node_name=node.name))
+                        allow_topics.add(inter.interface.name)
+            if inter.destinations:
+                for dest in inter.destinations:
+                    if dest.pod == PodModel.name:
+                        allow_topics.add(inter.interface.name)
+    return allow_topics, dest_list
 
-    topics = list()
-    dsts = list()
-    for name in debug_list:
-        print(f'{name} from {debug_list}')
-        try:
-            node_model = PodModel.find_node(name)
-        except KeyError:
-            raise
-        # if not flag:
-        #     if bridge == BridgeMode.NoNeed:
-        #         bridge = get_bridge_mode(node_model)
-        #     if bridge == BridgeMode.Peer or bridge == BridgeMode.Listener:
-        #         tmp = get_bridge_mode(node_model)
-        #         if tmp is not BridgeMode.NoNeed and tmp != bridge:
-        #             bridge = BridgeMode.ListenerPeer
-        #             flag = True
-        #         else:
-        #             bridge = tmp
-        # if get_bridge_mode(node_model) == BridgeMode.Peer:
-        dsts.append(get_debug_pod_name(name))
-        if len(topics) == 0:
-            topics = _topics(node_model)
-        else:
-            tmp_list = topics
-            topics = _combine_lists(tmp_list, _topics(node_model))
-
-    return topics, dsts
+def collect_info_for_debug_pod_bridge(debug_node, app_id):
+    dest_list = set() # -e
+    allow_topics = set() # -a
+    node_info = DebugNodeInfo.parse_obj(debug_node)
+    for inter in node_info.interface_info:
+        print(inter.sources)
+        if inter.sources:
+            allow_topics.add(inter.interface.name)
+        if inter.destinations:
+            for dest in inter.destinations:
+                dest_list.add(dest.pod)
+                allow_topics.add(inter.interface.name)
+    return allow_topics, dest_list
 
 def decide_bridge_mode(debug_list, PodModel):
     bridge = BridgeMode.NoNeed
