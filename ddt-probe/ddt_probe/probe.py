@@ -146,7 +146,7 @@ async def start_debug(msg):
             if name in PodModel.lifecycle_node_list:
                 life_model = PodModel.find_lifecycle_node(name)
                 # Deactivate node
-                res = set_lifecycle_state(name, LifeCycleActionsEnum.Deactivate.value)
+                res = set_lifecycle_state(name, LifeCycleActionsEnum.Shutdown.value)
                 if res:
                     logging.info(f'Deactivate Lifecycle Node[{name}] successfully')
                 else:
@@ -219,8 +219,9 @@ async def pause_graph(msg):
     m = Message(**msg)
     pod_name = m.pod
     for ps in PodModel.processes:
-        stop_command(ps.pid, logger=logging)
-        set_process_state(PodModel, name=ps.name, logger=logging, stop=True)
+        if ps.name in ShowRosGraphProcesses:
+            stop_command(ps.pid, logger=logging)
+            set_process_state(PodModel, name=ps.name, logger=logging, stop=True)
     node_folder =pod_node_folder(app_id=PodInfo.app_id, pod_id=PodInfo.pod_id, remote=False)
     life_node_folder=pod_lifecycle_folder(app_id=PodInfo.app_id, pod_id=PodInfo.pod_id, remote=False)
     backup_to_finial(result_path = node_folder,

@@ -65,7 +65,7 @@ spec:
           - name: CYCLONEDDS_URI
             value: file:///root/dds_setting.xml
           - name: RUST_LOG
-            value: INFO
+            value: WARN
         ports:
           - containerPort: 4000
 ---
