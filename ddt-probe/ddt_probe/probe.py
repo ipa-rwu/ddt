@@ -218,7 +218,7 @@ async def start_debug_pod_bridge(msg):
 async def pause_graph(msg):
     m = Message(**msg)
     pod_name = m.pod
-    for ps in PodModel.processes:
+    for ps in ShowRosGraphProcesses:
         stop_command(ps.pid, logger=logging)
         set_process_state(PodModel, name=ps.name, logger=logging, stop=True)
     node_folder =pod_node_folder(app_id=PodInfo.app_id, pod_id=PodInfo.pod_id, remote=False)

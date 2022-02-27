@@ -118,7 +118,7 @@ def show_graph(app_id):
     res = combine_rosgraphs(app_obj=app_model)
     return jsonify(result=res)
 
-def stop_process(app_id):
+def stop_rosgraph_process(app_id):
     app_model = globals()[name_app_obj(app_id)]
     for pod in app_model.pods:
         msg = Message()
@@ -131,7 +131,7 @@ def stop_process(app_id):
 
 @app.route('/app_<string:app_id>/pause_graph')
 def pause_graph(app_id):
-    stop_process(app_id)
+    stop_rosgraph_process(app_id)
     app_model = globals()[name_app_obj(app_id)]
     update_app_model(app_model, logger=app.logger)
     return ("nothing")
@@ -141,7 +141,7 @@ Click topic
 """
 @app.route('/app_<string:app_id>/<pod_id>/topic_<topic_id>/add')
 def add_topic(app_id, pod_id, topic_id):
-    stop_process(app_id)
+    stop_rosgraph_process(app_id)
     return redirect(url_for('app_page', app_id=app_id))
 
 
@@ -150,7 +150,7 @@ ignore rosgraph node
 """
 @app.route('/app_<string:app_id>/<pod_id>/__$rosgraph_creator/add', methods=['GET', 'POST'])
 def ignore_node(app_id, pod_id):
-    stop_process(app_id)
+    stop_rosgraph_process(app_id)
     return redirect(url_for('app_page', app_id=app_id))
 
 """
@@ -158,7 +158,7 @@ add debug node
 """
 @app.route('/app_<string:app_id>/<pod_id>/__<node_id>/add', methods=['GET', 'POST'])
 def add_node(app_id, pod_id, node_id):
-    stop_process(app_id)
+    stop_rosgraph_process(app_id)
     node_id = node_id.replace('$', '/')
 
     app.logger.info(f'Select debugging node [{node_id}] from pod [{pod_id}]')
