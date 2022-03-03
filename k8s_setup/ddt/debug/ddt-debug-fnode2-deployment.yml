@@ -18,8 +18,8 @@ spec:
       labels:
         app: chatter-demo
         role: ddt-probe
-      annotations:
-        k8s.v1.cni.cncf.io/networks: rosmc-network
+      # annotations:
+      #   k8s.v1.cni.cncf.io/networks: rosmc-network
     spec:
       containers:
       - name: ddt-debug-chatter-demo-fnode2
@@ -57,7 +57,7 @@ spec:
           - name: DDT_MANAGER_PORT
             value: "1234"
           - name: NETINTERFACE
-            value: "net1"
+            value: "lo"
           - name: CYCLONEDDS_URI
             value: file:///root/dds_setting.xml
           - name: RUST_LOG

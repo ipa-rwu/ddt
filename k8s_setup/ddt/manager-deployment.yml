@@ -18,8 +18,8 @@ spec:
       labels:
         app: ddt
         role: manager
-      annotations:
-        k8s.v1.cni.cncf.io/networks: rosmc-network
+      # annotations:
+      #   k8s.v1.cni.cncf.io/networks: rosmc-network
     spec:
       serviceAccountName: ddt-manager
       containers:
