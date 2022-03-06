@@ -42,7 +42,7 @@ public:
   {
     static size_t count = 0;
     auto msg = std::make_unique<std_msgs::msg::String>();
-    msg->data = this->get_name() + std::string(": ") + std::to_string(++count);
+    msg->data = this->get_name() + std::string(" publishing to ") + this->s + std::string(": ") + std::to_string(++count);
 
     // Print the current state for demo purposes
     if (!pub_->is_activated())
