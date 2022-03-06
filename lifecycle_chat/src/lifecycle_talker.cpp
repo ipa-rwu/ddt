@@ -34,6 +34,7 @@ public:
       : rclcpp_lifecycle::LifecycleNode(node_name,
                                         rclcpp::NodeOptions().use_intra_process_comms(intra_process_comms))
   {
+     this->declare_parameter("talk_to","lifecycle_chatter");
   }
 
   void
@@ -108,11 +109,16 @@ public:
     // can comply to the current state of the node.
     // As of the beta version, there is only a lifecycle publisher
     // available.
-    pub_ = this->create_publisher<std_msgs::msg::String>("lifecycle_chatter", 10);
+    RCLCPP_INFO(get_logger(), "on_configure() is called.");
+
+    this->s=this->get_parameter("talk_to").as_string();
+
+    RCLCPP_INFO(get_logger(), "will publish to %s.",this->s.c_str());
+
+    pub_ = this->create_publisher<std_msgs::msg::String>(this->s, 10);
     timer_ = this->create_wall_timer(
         1s, std::bind(&LifecycleTalker::publish, this));
 
-    RCLCPP_INFO(get_logger(), "on_configure() is called.");
 
     // We return a success and hence invoke the transition to the next
     // step: "inactive".
@@ -264,6 +270,8 @@ private:
   // lifecycle publisher.
   std::shared_ptr<rclcpp::TimerBase> timer_;
   std::unique_ptr<bond::Bond> bond_{nullptr};
+
+  std::string s="lifecycle_chatter";
 };
 
 /**
@@ -281,6 +289,7 @@ int main(int argc, char *argv[])
   rclcpp::init(argc, argv);
 
   rclcpp::executors::SingleThreadedExecutor exe;
+
 
   std::shared_ptr<LifecycleTalker> lc_node =
       std::make_shared<LifecycleTalker>("lc_talker");
