@@ -38,6 +38,7 @@ spec:
             value: "4000"
         ports:
           - containerPort: 1234
+      terminationGracePeriodSeconds: 30
 
 ---
 apiVersion: v1

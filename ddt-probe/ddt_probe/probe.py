@@ -278,16 +278,24 @@ def init():
             level=logging.INFO,
             datefmt='%Y-%m-%d %H:%M:%S')
 
+import signal
+import time
+def handle_exit(sig, frame):
+    raise(SystemExit)
+
 def main(server_ip, server_port, podinfo):
     init()
     global PodInfo
     PodInfo = podinfo
+    signal.signal(signal.SIGTERM, handle_exit)
+
     loop = asyncio.get_event_loop()
     asyncio.ensure_future(connect(server_ip, server_port))
 
     try:
         loop.run_forever()
-    except KeyboardInterrupt:
+    except (SystemExit, KeyboardInterrupt):
+        logging.info('Recieve SIGTERM signal')
         loop.run_until_complete(cleanup())
     finally:
         loop.set_debug(True)
