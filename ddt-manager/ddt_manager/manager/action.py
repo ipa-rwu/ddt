@@ -146,7 +146,7 @@ def set_processes_group(pod_model, processes, logger, **kwargs):
             pod_model.processes.append(Process(name=process['name']))
         set_process_state(pod_model, name = process['name'], pid=process['pid'], logger = logger, **kwargs)
 
-def deploy_debug_node(file, **kwargs):
+def deploy_deployment_file(file, **kwargs):
     logger = kwargs.get('logger')
     config.load_incluster_config()
     if file.is_file():

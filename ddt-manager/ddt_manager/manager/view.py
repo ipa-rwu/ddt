@@ -33,8 +33,9 @@ from ddt_manager.utils import get_rooms
 from ddt_manager.utils import cleanup_folder
 from ddt_manager.utils import get_log_path
 from ddt_manager.utils import debug_deployment_folder
+from ddt_manager.utils import app_deployment_folder
 
-from ddt_manager.manager.action import deploy_debug_node, update_ros_graph
+from ddt_manager.manager.action import deploy_deployment_file, update_ros_graph
 from ddt_manager.manager.action import combine_rosgraphs
 from ddt_manager.manager.action import show_svg
 from ddt_manager.manager.action import check_state_emit
@@ -65,7 +66,50 @@ def index():
 
 @app.route('/home')
 def home():
-    return redirect(url_for('index'))
+    p = Path(app_deployment_folder).glob('**/*')
+    files = [x.name for x in p if x.is_file()]
+    return render_template('home.html', upload_files = files)
+
+@app.route('/home/upload', methods=['GET', 'POST'])
+def upload_app():
+    Path(app_deployment_folder).mkdir(exist_ok=True, parents=True)
+    if request.method == 'POST':
+        # check if the post request has the file part
+        if 'file' not in request.files:
+            flash('No file part')
+            return redirect(request.url)
+        files = request.files.getlist('file')
+        # If the user does not select a file, the browser submits an
+        # empty file without a filename.
+        for file in files:
+            if file.filename == '':
+                flash('No selected file')
+                return redirect(url_for('home'))
+            if file and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                file.save(Path(app_deployment_folder/filename))
+        return redirect(url_for('home'))
+
+@app.route('/home/delete_deployments', methods=['GET', 'POST'])
+def delete_app_deployments():
+    app.logger.info(f'Delete application deployment')
+    if request.method == 'POST':
+        filename = request.form.get("file")
+        Path(app_deployment_folder/filename).unlink()
+        return redirect(url_for('home'))
+
+
+@app.route('/home/comfirm_upload', methods=['GET', 'POST'])
+def comfirm_upload_app():
+    if request.method == 'POST':
+        info = get_list(["file"])
+        app.logger.info(f'Get deployment files for applications: {info}')
+        deploy_file_names = [l["file"] for l in info]
+        deploy_file_path = [Path(app_deployment_folder) / file for file in deploy_file_names]
+        # Todo: Autogen deploymebt file
+        for file in deploy_file_path:
+            res = deploy_deployment_file(file)
+        return redirect(url_for('home'))
 
 @app.route('/favicon.ico')
 def favicon():

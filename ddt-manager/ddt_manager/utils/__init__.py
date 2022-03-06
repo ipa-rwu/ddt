@@ -41,6 +41,8 @@ def get_app_rosgraph_path(app_id):
 def get_pod_domain_svg(app_id, pod_id):
     return Path(pod_folder(app_id, pod_id, remote=False) / f'domain_id.svg')
 
+app_deployment_folder = Path(TmpFolder / "AppDeployments")
+
 def debug_deployment_folder(app_id):
     folder = Path(app_folder(app_id=app_id, remote=False) / 'debug_deployment')
     folder.mkdir(exist_ok=True, parents=True)

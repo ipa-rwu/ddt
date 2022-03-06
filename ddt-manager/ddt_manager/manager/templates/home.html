@@ -1,0 +1,36 @@
+{% extends "index.html" %}
+{% block header %}
+{{ super() }}
+<script type="text/javascript" src="/static/js/functions.js"></script>
+{% endblock  %}
+{% block context %}
+
+<p></p>
+
+
+<p>Choose a deployment file for an application:</p>
+<p></p>
+<form id="submit_app_list" method=post action="{{ url_for('upload_app') }}" enctype=multipart/form-data>
+<input type = "file" name = "file" accept=".yaml,.yml" multiple=""/>
+<input type = "submit"  value=Upload>
+</form>
+
+<p></p>
+
+{% for file in upload_files %}
+<form id="delete_deployments" method=post action="{{ url_for('delete_app_deployments') }}">
+  <td name="delete_{{ file }}" style="display: inline;" >{{ file }}</td>
+  <input type="hidden" name="file" value="{{ file }}" />
+  <button type=submit style="display: inline;" >Delete</button>
+</form>
+{% endfor %}
+
+<form id="comfirm_upload" method=post action="{{ url_for('comfirm_upload_app') }}">
+{% for file in upload_files %}
+  <!-- <input name="file" value="{{ file }}" /> -->
+  <input type="hidden" name="file" value="{{ file }}" />
+{% endfor %}
+  <button type=submit style="display: inline;" >CONFIRM</button>
+</form>
+
+{% endblock  %}
