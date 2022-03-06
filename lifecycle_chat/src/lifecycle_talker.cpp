@@ -35,6 +35,8 @@ public:
                                         rclcpp::NodeOptions().use_intra_process_comms(intra_process_comms))
   {
      this->declare_parameter("talk_to","lifecycle_chatter");
+     this->declare_parameter("no_bond",false);
+
   }
 
   void
@@ -146,11 +148,15 @@ public:
     // We explicitly activate the lifecycle publisher.
     // Starting from this point, all messages are no longer
     // ignored but sent into the network.
+    this->nobond=this->get_parameter("no_bond").as_bool();
+
+
     pub_->on_activate();
 
     RCUTILS_LOG_INFO_NAMED(get_name(), "on_activate() is called.");
 
-    // create_bond();
+    if (!this->nobond)
+      create_bond();
     // We return a success and hence invoke the transition to the next
     // step: "active".
     // If we returned TRANSITION_CALLBACK_FAILURE instead, the state machine
@@ -180,7 +186,9 @@ public:
     pub_->on_deactivate();
 
     RCUTILS_LOG_INFO_NAMED(get_name(), "on_deactivate() is called.");
-    // destroy_bond();
+    
+    if (!this->nobond)
+      destroy_bond();
 
     // We return a success and hence invoke the transition to the next
     // step: "inactive".
@@ -272,6 +280,7 @@ private:
   std::unique_ptr<bond::Bond> bond_{nullptr};
 
   std::string s="lifecycle_chatter";
+  bool nobond=false;
 };
 
 /**
