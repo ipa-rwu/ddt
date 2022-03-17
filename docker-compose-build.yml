@@ -1,5 +1,8 @@
 version: '3'
-
+networks:
+  ddt-network:
+    external: false
+    driver: "bridge"
 services:
 
   builder:
@@ -7,6 +10,8 @@ services:
     build:
       context: ./docker/builder/ros2
       dockerfile: Dockerfile
+    profiles:
+      - dependencies
 
   ros:
     image: inspiron:5000/ros:galactic
@@ -15,6 +20,8 @@ services:
       dockerfile: Dockerfile
     depends_on:
       - builder
+    profiles:
+      - dependencies
 
   ros2-model:
     image: inspiron:5000/ros2-model:latest
@@ -23,6 +30,8 @@ services:
       dockerfile: Dockerfile
       args:
         - PKG=ros2-model
+    profiles:
+      - dependencies
 
   ddt-utils:
     image: inspiron:5000/ddt-utils:latest
@@ -34,8 +43,16 @@ services:
         - BASE_IMAGE=ros2-model
         - PREFIX=inspiron:5000/
         - SUFFIX=:latest
+    profiles:
+      - dependencies
     depends_on:
       - ros2-model
+    ports:
+      - 4444:1234
+    environment:
+      - FLASK_ENV=development
+      - DDT_FOLDER=/ddt
+      - DDT_PROBE_SERVER_PORT=4000
 
   ddt-manager:
     image: inspiron:5000/ddt-manager:latest
@@ -56,6 +73,10 @@ services:
       - DDT_PROBE_SERVER_PORT=4000
     depends_on:
       - ddt-utils
+    profiles:
+      - executable
+    networks:
+        - ddt-network
 
   ros2-helpers:
     image: inspiron:5000/ros2-helpers:latest
@@ -68,6 +89,8 @@ services:
         - BASE_IMAGE=ros2-model
         - SUFFIX=:latest
         - BASE_SUFFIX=:galactic
+    profiles:
+      - dependencies
     depends_on:
       - ros2-model
       - ros
@@ -82,6 +105,8 @@ services:
         - PREFIX=inspiron:5000/
         - BUILDER_SUFFIX=:ros2
         - SUFFIX=:galactic
+    profiles:
+      - dependencies
     depends_on:
       - ros
 
@@ -108,6 +133,8 @@ services:
       - ddt-utils
       - ros2-helpers
       - ros2-graph-quest
+    profiles:
+      - dependencies
 
   ddt-demo:
     image: inspiron:5000/ddt-demo:latest
@@ -120,3 +147,24 @@ services:
         - PROBE=ddt-probe
     depends_on:
       - ddt-probe
+      - ddt-manager
+    profiles:
+      - executable
+    ports:
+      - 4001:4000
+    environment:
+      - DDT_FOLDER=/ddt
+      - DDT_PROBE_SERVER=ddt-probe-1
+      - DDT_PROBE_SERVER_PORT=4000
+      - APP_ID=chatter-test
+      - POD_ID=ddt-probe-1
+      - POD_IP=ddt-probe-1
+      - ROS_DOMAIN_ID=42
+      - DDT_MANAGER_SERVER=ddt-manager
+      - DDT_MANAGER_PORT=1234
+    networks:
+        - ddt-network
+    command:
+      bash -c "
+      source /ros_entrypoint.sh &&
+      ros2 launch lifecycle_chat scenario1.py & ./run.sh"

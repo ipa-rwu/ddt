@@ -15,25 +15,62 @@ services:
     networks:
         - ddt-network
 
-  ddt-probe-1:
+  chatter-demo-distributed-tnode1:
+    image: inspiron:5000/ddt-demo:latest
+    ports:
+      - 4002:4000
+    environment:
+      - DDT_FOLDER=/ddt
+      - DDT_PROBE_SERVER=chatter-demo-distributed-tnode1
+      - DDT_PROBE_SERVER_PORT=4000
+      - APP_ID=chatter-test
+      - POD_ID=chatter-demo-distributed-tnode1
+      - POD_IP=chatter-demo-distributed-tnode1
+      - ROS_DOMAIN_ID=42
+      - DDT_MANAGER_SERVER=ddt-manager
+      - DDT_MANAGER_PORT=1234
+      - NETINTERFACE=lo
+      - CYCLONEDDS_URI=file:///root/dds_setting.xml
+    networks:
+        - ddt-network
+    command:
+      bash -c "
+      source /ros_entrypoint.sh && ros2 run lifecycle_chat lifecycle_talker --ros-args --remap lc_talker:__name:=talker &
+      source /ros_entrypoint.sh && ros2 lifecycle set /talker configure &&
+      source /ros_entrypoint.sh && ros2 lifecycle set /talker activate &&
+      sleep 5 &&
+      RUST_LOG=INFO /root/zenoh-bridge-dds -d $ROS_DOMAIN_ID -l tcp/0.0.0.0:8000 -e tcp/chatter-demo-distributed-fnode2:8000 &
+      source /ros_entrypoint.sh && ./run.sh"
+    depends_on:
+      - ddt-manager
+
+  chatter-demo-distributed-fnode2:
     image: inspiron:5000/ddt-demo:latest
     ports:
       - 4001:4000
     environment:
       - DDT_FOLDER=/ddt
-      - DDT_PROBE_SERVER=ddt-probe-1
+      - DDT_PROBE_SERVER=chatter-demo-distributed-fnode2
       - DDT_PROBE_SERVER_PORT=4000
       - APP_ID=chatter-test
-      - POD_ID=ddt-probe-1
-      - POD_IP=ddt-probe-1
+      - POD_ID=chatter-demo-distributed-fnode2
+      - POD_IP=chatter-demo-distributed-fnode2
       - ROS_DOMAIN_ID=42
       - DDT_MANAGER_SERVER=ddt-manager
       - DDT_MANAGER_PORT=1234
+      - NETINTERFACE=lo
+      - CYCLONEDDS_URI=file:///root/dds_setting.xml
     networks:
         - ddt-network
     command:
       bash -c "
-      source /ros_entrypoint.sh &&
-      ros2 launch lifecycle_chat scenario1.py & ./run.sh"
+      source /ros_entrypoint.sh && ros2 run lifecycle_chat lifecycle_forwarder --ros-args --remap  lc_forwarder:__name:=forwarder &
+      source /ros_entrypoint.sh && ros2 lifecycle set /forwarder configure &&
+      source /ros_entrypoint.sh && ros2 lifecycle set /forwarder activate &&
+      sleep 5 &&
+      source /ros_entrypoint.sh && ./run.sh &
+      sleep 5 &&
+      RUST_LOG=INFO /root/zenoh-bridge-dds -d $ROS_DOMAIN_ID -l tcp/0.0.0.0:8000 -e tcp/chatter-demo-distributed-tnode1:8000
+      "
     depends_on:
       - ddt-manager
