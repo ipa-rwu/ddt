@@ -35,6 +35,8 @@ public:
       : rclcpp_lifecycle::LifecycleNode(node_name,
                                         rclcpp::NodeOptions().use_intra_process_comms(intra_process_comms))
   {
+    this->declare_parameter("sub_to","lifecycle_chatter");
+    this->declare_parameter("no_bond",false);
   }
 
   void
@@ -42,7 +44,7 @@ public:
   {
     auto msg = std::make_unique<std_msgs::msg::String>();
     //msg->data = this->get_name() + std::string(": ") + std::to_string(++count);
-    msg->data = this->get_name() + std::string(": Forwarding") + std::string(originalmsg->data.c_str());
+    msg->data = this->get_name() + std::string(": Forwarding ") + std::string(originalmsg->data.c_str());
 
 
     // Print the current state for demo purposes
@@ -87,6 +89,7 @@ public:
     // As of the beta version, there is only a lifecycle publisher
     // available.
     pub_ = this->create_publisher<std_msgs::msg::String>("lifecycle_forward", 10);
+    this->sub_topic=this->get_parameter("sub_to").as_string();
 
     RCLCPP_INFO(get_logger(), "on_configure() is called.");
 
@@ -140,15 +143,19 @@ public:
     // We explicitly activate the lifecycle publisher.
     // Starting from this point, all messages are no longer
     // ignored but sent into the network.
+    this->nobond=this->get_parameter("no_bond").as_bool();
+
     pub_->on_activate();
 
     // Data topic from the lc_talker node
 
+    if (!this->nobond)
+      create_bond();
+
     sub_data_ = this->create_subscription<std_msgs::msg::String>(
-        "lifecycle_chatter", 10,
+        this->sub_topic, 10,
         std::bind(&LifecycleForwarder::data_callback, this, std::placeholders::_1));
 
-    // create_bond();
     RCUTILS_LOG_INFO_NAMED(get_name(), "on_activate() is called.");
 
     // Let's sleep for 2 seconds.
@@ -193,7 +200,8 @@ public:
     RCUTILS_LOG_INFO_NAMED(get_name(), "on_deactivate() is called.");
 
     // destroy bond connection
-    // destroy_bond();
+    if (!this->nobond)
+      destroy_bond();
 
     // We return a success and hence invoke the transition to the next
     // step: "inactive".
@@ -278,6 +286,8 @@ private:
   std::shared_ptr<rclcpp::Subscription<lifecycle_msgs::msg::TransitionEvent>>
       sub_notification_;
   std::unique_ptr<bond::Bond> bond_{nullptr};
+  bool nobond=false;
+  std::string sub_topic = "lifecycle_chatter";
 };
 
 /**

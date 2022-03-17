@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: chatter-demo-auto
+    role: ddt-probe
+  name: chatter-group-auto
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chatter-group-auto
+      role: ddt-probe
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: chatter-group-auto
+        role: ddt-probe
+      # annotations:
+      #   k8s.v1.cni.cncf.io/networks: rosmc-network
+    spec:
+      containers:
+      - name: chatter-group-auto
+        image: inspiron:5000/ddt-demo:latest
+        imagePullPolicy: Always
+        command: ["/bin/bash", "-c"]
+        args: ["
+              source /ros_entrypoint.sh && ros2 launch lifecycle_chat scenario1.py number_of_node_pair:=30 &
+              source /ros_entrypoint.sh && ./run.sh
+              "
+              ]
+        env:
+          - name: POD_ID
+            value: chatter-group-auto
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: DDT_FOLDER
+            value: /ddt
+          - name: DDT_PROBE_SERVER
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: DDT_PROBE_SERVER_PORT
+            value: "4000"
+          - name: APP_ID
+            value: chatter-demo-auto
+          - name: ROS_DOMAIN_ID
+            value: "42"
+          - name: DDT_MANAGER_SERVER
+            value: ddt-manager
+          - name: DDT_MANAGER_PORT
+            value: "1234"
+          - name: NETINTERFACE
+            value: "eth0"
+          - name: CYCLONEDDS_URI
+            value: file:///root/dds_setting.xml
+          - name: RUST_LOG
+            value: WARN
+        ports:
+          - containerPort: 4000

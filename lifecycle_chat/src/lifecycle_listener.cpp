@@ -37,16 +37,21 @@ public:
   explicit LifecycleListener(const std::string & node_name)
   : Node(node_name)
   {
+    this->declare_parameter("sub_to","lifecycle_input");
+    this->declare_parameter("sub_transition","/lc_talker/lifecycle_transition");
+    this->sub_topic=this->get_parameter("sub_to").as_string();
+    this->sub_transition=this->get_parameter("sub_transition").as_string();
+
     // Data topic from the lc_talker node
     sub_data_ = this->create_subscription<std_msgs::msg::String>(
-      "lifecycle_input", 10,
+      this->sub_topic, 10,
       std::bind(&LifecycleListener::data_callback, this, std::placeholders::_1));
 
     // Notification event topic. All state changes
     // are published here as TransitionEvents with
     // a start and goal state indicating the transition
     sub_notification_ = this->create_subscription<lifecycle_msgs::msg::TransitionEvent>(
-      "/lc_talker/transition_event",
+      this->sub_transition,
       10,
       std::bind(&LifecycleListener::notification_callback, this, std::placeholders::_1));
   }
@@ -67,6 +72,8 @@ private:
   std::shared_ptr<rclcpp::Subscription<std_msgs::msg::String>> sub_data_;
   std::shared_ptr<rclcpp::Subscription<lifecycle_msgs::msg::TransitionEvent>>
   sub_notification_;
+  std::string sub_topic = "lifecycle_input";
+  std::string sub_transition = "/lc_talker/lifecycle_transition";
 };
 
 int main(int argc, char ** argv)

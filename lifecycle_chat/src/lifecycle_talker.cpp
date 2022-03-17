@@ -34,6 +34,9 @@ public:
       : rclcpp_lifecycle::LifecycleNode(node_name,
                                         rclcpp::NodeOptions().use_intra_process_comms(intra_process_comms))
   {
+     this->declare_parameter("talk_to","lifecycle_chatter");
+     this->declare_parameter("no_bond",false);
+
   }
 
   void
@@ -41,7 +44,7 @@ public:
   {
     static size_t count = 0;
     auto msg = std::make_unique<std_msgs::msg::String>();
-    msg->data = this->get_name() + std::string(": ") + std::to_string(++count);
+    msg->data = this->get_name() + std::string(" publishing to ") + this->s + std::string(": ") + std::to_string(++count);
 
     // Print the current state for demo purposes
     if (!pub_->is_activated())
@@ -108,11 +111,16 @@ public:
     // can comply to the current state of the node.
     // As of the beta version, there is only a lifecycle publisher
     // available.
-    pub_ = this->create_publisher<std_msgs::msg::String>("lifecycle_chatter", 10);
+    RCLCPP_INFO(get_logger(), "on_configure() is called.");
+
+    this->s=this->get_parameter("talk_to").as_string();
+
+    RCLCPP_INFO(get_logger(), "will publish to %s.",this->s.c_str());
+
+    pub_ = this->create_publisher<std_msgs::msg::String>(this->s, 10);
     timer_ = this->create_wall_timer(
         1s, std::bind(&LifecycleTalker::publish, this));
 
-    RCLCPP_INFO(get_logger(), "on_configure() is called.");
 
     // We return a success and hence invoke the transition to the next
     // step: "inactive".
@@ -140,11 +148,15 @@ public:
     // We explicitly activate the lifecycle publisher.
     // Starting from this point, all messages are no longer
     // ignored but sent into the network.
+    this->nobond=this->get_parameter("no_bond").as_bool();
+
+
     pub_->on_activate();
 
     RCUTILS_LOG_INFO_NAMED(get_name(), "on_activate() is called.");
 
-    // create_bond();
+    if (!this->nobond)
+      create_bond();
     // We return a success and hence invoke the transition to the next
     // step: "active".
     // If we returned TRANSITION_CALLBACK_FAILURE instead, the state machine
@@ -174,7 +186,9 @@ public:
     pub_->on_deactivate();
 
     RCUTILS_LOG_INFO_NAMED(get_name(), "on_deactivate() is called.");
-    // destroy_bond();
+    
+    if (!this->nobond)
+      destroy_bond();
 
     // We return a success and hence invoke the transition to the next
     // step: "inactive".
@@ -264,6 +278,9 @@ private:
   // lifecycle publisher.
   std::shared_ptr<rclcpp::TimerBase> timer_;
   std::unique_ptr<bond::Bond> bond_{nullptr};
+
+  std::string s="lifecycle_chatter";
+  bool nobond=false;
 };
 
 /**
@@ -281,6 +298,7 @@ int main(int argc, char *argv[])
   rclcpp::init(argc, argv);
 
   rclcpp::executors::SingleThreadedExecutor exe;
+
 
   std::shared_ptr<LifecycleTalker> lc_node =
       std::make_shared<LifecycleTalker>("lc_talker");
