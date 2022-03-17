@@ -310,7 +310,7 @@ def comfirm_upload(app_id):
         deploy_file_path = [Path(debug_deployment_folder(app_id=app_id)) / file for file in deploy_file_names]
         # Todo: Autogen deploymebt file
         for file in deploy_file_path:
-            res = deploy_debug_node(file)
+            res = deploy_deployment_file(file)
         return redirect(url_for('app_page', app_id=app_id))
 
 def monitor_applist_thread():
