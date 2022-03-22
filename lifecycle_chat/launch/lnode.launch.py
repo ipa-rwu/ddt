@@ -14,11 +14,15 @@ def generate_launch_description():
 
     declare_log_level = DeclareLaunchArgument("log_level", default_value=["WARN"], description="Logging level")
 
-    node_name="debug_lnode3"
+    i = 0
+    fnode_name=f"fnode_{i}"
+    node_name=f"debug_lnode_{i}"
     start_lnode3_cmd = launch_ros.actions.Node(
             package='lifecycle_chat',
             executable='lifecycle_listener',
             name=node_name,
+            parameters=[{'sub_to': f'/{fnode_name}/lifecycle_input'},
+                        {'sub_transition': f'/{fnode_name}/lifecycle_transition'}],
             output='log',
             emulate_tty=True,  # https://github.com/ros2/launch/issues/188
         #     arguments=['--ros-args', '--log-level', logger]
